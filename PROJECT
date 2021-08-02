@@ -1,0 +1,6 @@
+domain: porter.run
+layout:
+- go.kubebuilder.io/v3
+projectName: porter-agent
+repo: github.com/porter-dev/porter-agent
+version: "3"
