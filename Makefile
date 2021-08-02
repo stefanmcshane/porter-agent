@@ -1,4 +1,4 @@
-
+CLUSTER_NAME ?= porter-test-cluster
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
@@ -31,6 +31,11 @@ all: build
 # https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
 # More info on the awk command:
 # http://linuxcommand.org/lc3_adv_awk.php
+
+cluster:
+	kind create cluster --name ${CLUSTER_NAME} --config kind-config.yaml
+delete-cluster:
+	kind delete cluster --name ${CLUSTER_NAME}
 
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
