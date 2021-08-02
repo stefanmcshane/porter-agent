@@ -43,3 +43,8 @@ based on the config provided in the config map.
 ### Design choices
 1. Since the porter server is currently HTTP and the communication between controller and server is not going to be an overwhelming number
 of requests, we have decided to stick with HTTP & JSON based communication for now over a more advanced use like gRPC.
+
+
+### Diagram
+![porter-agent](https://user-images.githubusercontent.com/7482025/127897279-6be8a8bd-8dfc-40c9-b103-33085d87582f.png)
+
