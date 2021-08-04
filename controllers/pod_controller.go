@@ -68,12 +68,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	if instance.Status.Phase == corev1.PodFailed ||
 		instance.Status.Phase == corev1.PodUnknown {
 		// critical condition, must trigger a notification
-		reqLogger.Info("current pod condition",
-			"Conditions", instance.Status.Conditions,
-			"Message", instance.Status.Message,
-			"Reason", instance.Status.Reason,
-			"Pod Phase", instance.Status.Phase)
-
 		r.Processor.TriggerNotifyForFatalEvent(req.NamespacedName,
 			map[string]interface{}{
 				"Conditions": instance.Status.Conditions,
