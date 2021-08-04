@@ -19,10 +19,10 @@ package controllers
 import (
 	"context"
 
+	"github.com/porter-dev/porter-agent/pkg/processor"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -32,7 +32,7 @@ import (
 type PodReconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
-	ClientSet *kubernetes.Clientset
+	Processor processor.Interface
 }
 
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
@@ -67,38 +67,24 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	// we can log the current condition
 	if instance.Status.Phase == corev1.PodFailed ||
 		instance.Status.Phase == corev1.PodUnknown {
+		// critical condition, must trigger a notification
 		reqLogger.Info("current pod condition",
 			"Conditions", instance.Status.Conditions,
 			"Message", instance.Status.Message,
 			"Reason", instance.Status.Reason,
 			"Pod Phase", instance.Status.Phase)
+
+		r.Processor.TriggerNotifyForFatalEvent(req.NamespacedName,
+			map[string]interface{}{
+				"Conditions": instance.Status.Conditions,
+				"Message":    instance.Status.Message,
+				"Reason":     instance.Status.Reason,
+				"Pod Phase":  instance.Status.Phase,
+			})
 	} else {
 		// normal event, fetch and enqueue latest logs
-		reqLogger.Info("Fetching logs")
-		maxTailLines := new(int64)
-		*maxTailLines = 100
-
-		req := r.ClientSet.
-			CoreV1().
-			Pods(req.Namespace).
-			GetLogs(req.Name, &corev1.PodLogOptions{
-				TailLines: maxTailLines,
-			})
-
-		podLogs, err := req.Stream(ctx)
-		if err != nil {
-			reqLogger.Error(err, "error streaming logs")
-		}
-		defer podLogs.Close()
-
-		var logs []byte
-		_, err = podLogs.Read(logs)
-		if err != nil {
-			reqLogger.Error(err, "unable to read logs")
-		}
-
-		reqLogger.Info("Successfully fetched logs")
-		// push logs to the processor
+		reqLogger.Info("processing logs for pod")
+		r.Processor.EnqueueWithLogLines(ctx, req.NamespacedName)
 	}
 
 	return ctrl.Result{}, nil
