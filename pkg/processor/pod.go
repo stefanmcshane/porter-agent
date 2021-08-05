@@ -44,6 +44,7 @@ func (p *PodEventProcessor) EnqueueWithLogLines(ctx context.Context, object type
 	podLogs, err := req.Stream(ctx)
 	if err != nil {
 		logger.Error(err, "error streaming logs")
+		return
 	}
 	defer podLogs.Close()
 
@@ -51,6 +52,7 @@ func (p *PodEventProcessor) EnqueueWithLogLines(ctx context.Context, object type
 	_, err = io.Copy(logs, podLogs)
 	if err != nil {
 		logger.Error(err, "unable to read logs")
+		return
 	}
 
 	strLogs := logs.String()
@@ -59,15 +61,16 @@ func (p *PodEventProcessor) EnqueueWithLogLines(ctx context.Context, object type
 	err = p.redisClient.AppendAndTrimDetails(ctx, p.resourceType, object.Namespace, object.Name, strings.Split(strLogs, "\n"))
 	if err != nil {
 		logger.Error(err, "unable to append logs to the store")
+		return
 	}
 }
 
 // to trigger actual request for porter server in case of
 // a Delete or Failed/Unknown Phase
-func (p *PodEventProcessor) TriggerNotifyForFatalEvent(object types.NamespacedName, details map[string]interface{}) {
-	logger := log.Log.WithValues("pod notify trigger")
+func (p *PodEventProcessor) TriggerNotifyForFatalEvent(ctx context.Context, object types.NamespacedName, details map[string]interface{}) {
+	logger := log.FromContext(ctx)
 	logger.Info("notification triggered")
 
 	logger.Info("current pod condition", "details", details)
-	panic("not implemented") // TODO: Implement
+	// TODO: Implement
 }

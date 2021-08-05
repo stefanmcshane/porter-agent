@@ -11,5 +11,5 @@ type Interface interface {
 	EnqueueWithLogLines(context context.Context, object types.NamespacedName)
 	// to trigger actual request for porter server in case of
 	// a Delete or Failed/Unknown Phase
-	TriggerNotifyForFatalEvent(object types.NamespacedName, details map[string]interface{})
+	TriggerNotifyForFatalEvent(context context.Context, object types.NamespacedName, details map[string]interface{})
 }

@@ -57,6 +57,8 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		if errors.IsNotFound(err) {
 			// must have been a delete event
 			reqLogger.Info("pod deleted")
+
+			// TODO: triggerNotify
 			return ctrl.Result{}, nil
 		}
 
@@ -68,20 +70,39 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	if instance.Status.Phase == corev1.PodFailed ||
 		instance.Status.Phase == corev1.PodUnknown {
 		// critical condition, must trigger a notification
-		r.Processor.TriggerNotifyForFatalEvent(req.NamespacedName,
-			map[string]interface{}{
-				"Conditions": instance.Status.Conditions,
-				"Message":    instance.Status.Message,
-				"Reason":     instance.Status.Reason,
-				"Pod Phase":  instance.Status.Phase,
-			})
-	} else {
+		r.triggerNotify(ctx, req, instance)
+		return ctrl.Result{}, nil
+	}
+
+	// check ready condition
+	for _, condition := range instance.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			if condition.Status == corev1.ConditionFalse {
+				// pod is experiencing issues and is not
+				// in ready condition, hence trigger notification
+				r.triggerNotify(ctx, req, instance)
+				return ctrl.Result{}, nil
+			}
+		}
+	}
+
+	if instance.Status.Phase != corev1.PodPending {
 		// normal event, fetch and enqueue latest logs
-		reqLogger.Info("processing logs for pod")
+		reqLogger.Info("processing logs for pod", "status", instance.Status)
 		r.Processor.EnqueueWithLogLines(ctx, req.NamespacedName)
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *PodReconciler) triggerNotify(ctx context.Context, req ctrl.Request, instance *corev1.Pod) {
+	r.Processor.TriggerNotifyForFatalEvent(ctx, req.NamespacedName,
+		map[string]interface{}{
+			"Conditions": instance.Status.Conditions,
+			"Message":    instance.Status.Message,
+			"Reason":     instance.Status.Reason,
+			"Pod Phase":  instance.Status.Phase,
+		})
 }
 
 // SetupWithManager sets up the controller with the Manager.
