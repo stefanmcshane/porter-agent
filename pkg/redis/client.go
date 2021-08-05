@@ -3,8 +3,9 @@ package redis
 import (
 	"context"
 	"fmt"
+	"time"
 
-	redis "github.com/go-redis/redis/v8"
+	goredis "github.com/go-redis/redis/v8"
 )
 
 const (
@@ -13,14 +14,16 @@ const (
 	NODESTORE
 )
 
+// Client is a redis client that also holds the
+// value for max log enteries to hold for each pod
 type Client struct {
-	client     *redis.Client
+	client     *goredis.Client
 	maxEntries int64
 }
 
 func NewClient(host, port, username, password string, db int, maxEntries int64) *Client {
 	return &Client{
-		client: redis.NewClient(&redis.Options{
+		client: goredis.NewClient(&goredis.Options{
 			Addr:     fmt.Sprintf("%s:%s", host, port),
 			Username: username,
 			Password: password,
@@ -38,6 +41,21 @@ func (r *Client) AppendAndTrimDetails(ctx context.Context, resourceType, namespa
 	}
 
 	_, err = r.client.LTrim(ctx, key, 0, r.maxEntries).Result()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *Client) AppendToNotifyWorkQueue(ctx context.Context, resourceType, namespace, name string) error {
+	key := "pending"
+
+	value := fmt.Sprintf("%s:%s:%s", resourceType, namespace, name)
+	_, err := r.client.ZAdd(ctx, key, &goredis.Z{
+		Score:  float64(time.Now().Unix()),
+		Member: value,
+	}).Result()
 	if err != nil {
 		return err
 	}

@@ -14,12 +14,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// PodEventProcessor is the pod processor that holds
+// a kube clientset, a redis client and the resource type
+// it is associated with
 type PodEventProcessor struct {
 	kubeClient   *kubernetes.Clientset
 	redisClient  *redis.Client
 	resourceType string
 }
 
+// NewPodEventProcessor returns a pod processor
+// with an instance of a kubernetes clientset
+// created with a given config
 func NewPodEventProcessor(config *rest.Config) Interface {
 	return &PodEventProcessor{
 		kubeClient:   kubernetes.NewForConfigOrDie(config),
@@ -28,7 +34,7 @@ func NewPodEventProcessor(config *rest.Config) Interface {
 	}
 }
 
-// Used in case of normal events to store and update logs
+// EnqueueWithLogLines is used in case of normal events to store and update logs
 func (p *PodEventProcessor) EnqueueWithLogLines(ctx context.Context, object types.NamespacedName) {
 	maxTailLines := new(int64)
 	*maxTailLines = 100
@@ -65,12 +71,25 @@ func (p *PodEventProcessor) EnqueueWithLogLines(ctx context.Context, object type
 	}
 }
 
-// to trigger actual request for porter server in case of
-// a Delete or Failed/Unknown Phase
+// TriggerNotifyForFatalEvent is supposed to trigger actual
+// request for porter server in case of a Delete or
+// Failed/Unknown Phase over HTTP. If that fails, it stores
+// the relevant event in a work queue
 func (p *PodEventProcessor) TriggerNotifyForFatalEvent(ctx context.Context, object types.NamespacedName, details map[string]interface{}) {
 	logger := log.FromContext(ctx)
 	logger.Info("notification triggered")
 
 	logger.Info("current pod condition", "details", details)
-	// TODO: Implement
+
+	// call HTTP client and try posting on the porter server
+	// in case of failure, append to the NotifyWorkQueue in redis
+
+	// TODO: implement/call HTTP layer
+
+	// assume HTTP failed, push to redis work queue
+	err := p.redisClient.AppendToNotifyWorkQueue(ctx, p.resourceType, object.Namespace, object.Name)
+	if err != nil {
+		logger.Error(err, "unable to push notify to work queue")
+		return
+	}
 }
