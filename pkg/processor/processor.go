@@ -3,6 +3,7 @@ package processor
 import (
 	"context"
 
+	"github.com/porter-dev/porter-agent/pkg/models"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -11,5 +12,5 @@ type Interface interface {
 	EnqueueWithLogLines(context context.Context, object types.NamespacedName)
 	// to trigger actual request for porter server in case of
 	// a Delete or Failed/Unknown Phase
-	TriggerNotifyForFatalEvent(context context.Context, object types.NamespacedName, details map[string]interface{})
+	TriggerNotifyForFatalEvent(context context.Context, object types.NamespacedName, details models.EventDetails)
 }

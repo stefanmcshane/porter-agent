@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 
+	"github.com/porter-dev/porter-agent/pkg/models"
 	"github.com/porter-dev/porter-agent/pkg/processor"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -97,11 +98,12 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 func (r *PodReconciler) triggerNotify(ctx context.Context, req ctrl.Request, instance *corev1.Pod) {
 	r.Processor.TriggerNotifyForFatalEvent(ctx, req.NamespacedName,
-		map[string]interface{}{
-			"Conditions": instance.Status.Conditions,
-			"Message":    instance.Status.Message,
-			"Reason":     instance.Status.Reason,
-			"Pod Phase":  instance.Status.Phase,
+		models.EventDetails{
+			ResourceType: models.PodResource,
+			Name:         req.Name,
+			Namespace:    req.Namespace,
+			Message:      instance.Status.Message,
+			Reason:       instance.Status.Reason,
 		})
 }
 

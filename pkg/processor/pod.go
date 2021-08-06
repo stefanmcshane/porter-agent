@@ -6,9 +6,11 @@ import (
 	"io"
 	"strings"
 
+	"github.com/porter-dev/porter-agent/pkg/models"
 	"github.com/porter-dev/porter-agent/pkg/redis"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -20,7 +22,7 @@ import (
 type PodEventProcessor struct {
 	kubeClient   *kubernetes.Clientset
 	redisClient  *redis.Client
-	resourceType string
+	resourceType models.EventResourceType
 }
 
 // NewPodEventProcessor returns a pod processor
@@ -29,7 +31,7 @@ type PodEventProcessor struct {
 func NewPodEventProcessor(config *rest.Config) Interface {
 	return &PodEventProcessor{
 		kubeClient:   kubernetes.NewForConfigOrDie(config),
-		resourceType: "pod",
+		resourceType: models.PodResource,
 		redisClient:  redis.NewClient("127.0.0.1", "6379", "", "", redis.PODSTORE, int64(100)),
 	}
 }
@@ -64,7 +66,7 @@ func (p *PodEventProcessor) EnqueueWithLogLines(ctx context.Context, object type
 	strLogs := logs.String()
 	logger.Info("Successfully fetched logs")
 	// update logs in the redis store
-	err = p.redisClient.AppendAndTrimDetails(ctx, p.resourceType, object.Namespace, object.Name, strings.Split(strLogs, "\n"))
+	err = p.redisClient.AppendAndTrimDetails(ctx, p.resourceType.String(), object.Namespace, object.Name, strings.Split(strLogs, "\n"))
 	if err != nil {
 		logger.Error(err, "unable to append logs to the store")
 		return
@@ -75,7 +77,7 @@ func (p *PodEventProcessor) EnqueueWithLogLines(ctx context.Context, object type
 // request for porter server in case of a Delete or
 // Failed/Unknown Phase over HTTP. If that fails, it stores
 // the relevant event in a work queue
-func (p *PodEventProcessor) TriggerNotifyForFatalEvent(ctx context.Context, object types.NamespacedName, details map[string]interface{}) {
+func (p *PodEventProcessor) TriggerNotifyForFatalEvent(ctx context.Context, object types.NamespacedName, details models.EventDetails) {
 	logger := log.FromContext(ctx)
 	logger.Info("notification triggered")
 
@@ -87,7 +89,13 @@ func (p *PodEventProcessor) TriggerNotifyForFatalEvent(ctx context.Context, obje
 	// TODO: implement/call HTTP layer
 
 	// assume HTTP failed, push to redis work queue
-	err := p.redisClient.AppendToNotifyWorkQueue(ctx, p.resourceType, object.Namespace, object.Name)
+	packed, err := json.Marshal(details)
+	if err != nil {
+		logger.Error(err, "unable to marshal details to a json object")
+		return
+	}
+
+	err = p.redisClient.AppendToNotifyWorkQueue(ctx, packed)
 	if err != nil {
 		logger.Error(err, "unable to push notify to work queue")
 		return

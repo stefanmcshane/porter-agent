@@ -48,13 +48,12 @@ func (r *Client) AppendAndTrimDetails(ctx context.Context, resourceType, namespa
 	return nil
 }
 
-func (r *Client) AppendToNotifyWorkQueue(ctx context.Context, resourceType, namespace, name string) error {
+func (r *Client) AppendToNotifyWorkQueue(ctx context.Context, packed []byte) error {
 	key := "pending"
 
-	value := fmt.Sprintf("%s:%s:%s", resourceType, namespace, name)
 	_, err := r.client.ZAdd(ctx, key, &goredis.Z{
 		Score:  float64(time.Now().Unix()),
-		Member: value,
+		Member: packed,
 	}).Result()
 	if err != nil {
 		return err
