@@ -33,7 +33,7 @@ based on the config provided in the config map.
       "cluster": "cluster_name",
       "message": "<message>",
       "reason": "<reason>",
-      "tail_logs": [
+      "data": [
         "last 100 log lines",
         "as an array of strings",
         "..."
