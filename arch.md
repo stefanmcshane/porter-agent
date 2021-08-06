@@ -31,8 +31,9 @@ based on the config provided in the config map.
       "name": "pod_name",
       "namespace": "namespace_name",
       "cluster": "cluster_name",
-      "event_type": "Healthy/Critical/Fatal/Scale-UP etc.",
-      "tail_logs": [
+      "message": "<message>",
+      "reason": "<reason>",
+      "data": [
         "last 100 log lines",
         "as an array of strings",
         "..."
