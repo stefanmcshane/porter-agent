@@ -97,14 +97,26 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 }
 
 func (r *PodReconciler) triggerNotify(ctx context.Context, req ctrl.Request, instance *corev1.Pod) {
-	r.Processor.TriggerNotifyForFatalEvent(ctx, req.NamespacedName,
+	reason, message := r.getReasonAndMessage(instance)
+	r.Processor.TriggerNotifyForEvent(ctx, req.NamespacedName,
 		models.EventDetails{
 			ResourceType: models.PodResource,
 			Name:         req.Name,
 			Namespace:    req.Namespace,
-			Message:      instance.Status.Message,
-			Reason:       instance.Status.Reason,
+			Message:      message,
+			Reason:       reason,
 		})
+}
+
+func (r *PodReconciler) getReasonAndMessage(instance *corev1.Pod) (string, string) {
+	for _, condition := range instance.Status.Conditions {
+		if condition.Type == corev1.PodReady &&
+			condition.Status != corev1.ConditionTrue {
+			return condition.Reason, condition.Message
+		}
+	}
+
+	return "", ""
 }
 
 // SetupWithManager sets up the controller with the Manager.

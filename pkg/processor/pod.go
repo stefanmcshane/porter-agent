@@ -73,11 +73,11 @@ func (p *PodEventProcessor) EnqueueWithLogLines(ctx context.Context, object type
 	}
 }
 
-// TriggerNotifyForFatalEvent is supposed to trigger actual
+// TriggerNotifyForEvent is supposed to trigger actual
 // request for porter server in case of a Delete or
 // Failed/Unknown Phase over HTTP. If that fails, it stores
 // the relevant event in a work queue
-func (p *PodEventProcessor) TriggerNotifyForFatalEvent(ctx context.Context, object types.NamespacedName, details models.EventDetails) {
+func (p *PodEventProcessor) TriggerNotifyForEvent(ctx context.Context, object types.NamespacedName, details models.EventDetails) {
 	logger := log.FromContext(ctx)
 	logger.Info("notification triggered")
 
