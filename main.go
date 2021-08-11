@@ -17,8 +17,10 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -33,17 +35,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/porter-dev/porter-agent/controllers"
+	"github.com/porter-dev/porter-agent/pkg/consumer"
 	"github.com/porter-dev/porter-agent/pkg/processor"
 	//+kubebuilder:scaffold:imports
 )
 
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	scheme        = runtime.NewScheme()
+	setupLog      = ctrl.Log.WithName("setup")
+	eventConsumer *consumer.EventConsumer
 )
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+
+	// create the event consumer
+	eventConsumer = consumer.NewEventConsumer(5, time.Second, context.TODO())
 
 	//+kubebuilder:scaffold:scheme
 }
@@ -96,6 +103,9 @@ func main() {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
+
+	setupLog.Info("starting event consumer")
+	go eventConsumer.Start()
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
