@@ -28,7 +28,7 @@ type EventConsumer struct {
 func NewEventConsumer(timePeriod int, timeUnit time.Duration, ctx context.Context) *EventConsumer {
 	return &EventConsumer{
 		redisClient: redis.NewClient("127.0.0.1", "6379", "", "", redis.PODSTORE, int64(100)),
-		httpClient:  httpclient.NewClient("http://localhost:80", ""),
+		httpClient:  httpclient.NewClient("http://localhost:8080", ""),
 		pulsar:      pulsar.NewPulsar(timePeriod, timeUnit),
 		context:     ctx,
 		consumerLog: ctrl.Log.WithName("event consumer"),
@@ -92,7 +92,7 @@ func (e *EventConsumer) injectLogs(payload *models.EventDetails) error {
 // server and returns an error if any. Its the responsibility of the caller
 // to retain the object in case the requests fails or times out
 func (e *EventConsumer) doHTTPPost(payload *models.EventDetails) error {
-	response, err := e.httpClient.Post("/anything", payload)
+	response, err := e.httpClient.Post("/api/projects/1/events?cluster_id=4", payload)
 	if err != nil {
 		// log and return error
 		e.consumerLog.Error(err, "error sending http request")
