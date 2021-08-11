@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"time"
 
 	"github.com/porter-dev/porter-agent/pkg/models"
 	"github.com/porter-dev/porter-agent/pkg/processor"
@@ -109,6 +110,7 @@ func (r *PodReconciler) triggerNotify(ctx context.Context, req ctrl.Request, ins
 			Message:      message,
 			Reason:       reason,
 			Critical:     isCritical,
+			Timestamp:    getTime(),
 		})
 }
 
@@ -128,4 +130,8 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Pod{}).
 		Complete(r)
+}
+
+func getTime() string {
+	return time.Now().Format(time.RFC3339)
 }

@@ -21,4 +21,5 @@ type EventDetails struct {
 	Reason       string            `json:"reason"`
 	Data         []string          `json:"data"`
 	Critical     bool              `json:"critical"`
+	Timestamp    string            `json:"timestamp"`
 }
