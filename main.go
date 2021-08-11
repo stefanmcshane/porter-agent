@@ -50,7 +50,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	// create the event consumer
-	eventConsumer = consumer.NewEventConsumer(5, time.Second, context.TODO())
+	eventConsumer = consumer.NewEventConsumer(50, time.Millisecond, context.TODO())
 
 	//+kubebuilder:scaffold:scheme
 }
