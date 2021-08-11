@@ -28,7 +28,7 @@ type EventConsumer struct {
 func NewEventConsumer(timePeriod int, timeUnit time.Duration, ctx context.Context) *EventConsumer {
 	return &EventConsumer{
 		redisClient: redis.NewClient("127.0.0.1", "6379", "", "", redis.PODSTORE, int64(100)),
-		httpClient:  httpclient.NewClient("https://httpbin.org", ""),
+		httpClient:  httpclient.NewClient("http://localhost:80", ""),
 		pulsar:      pulsar.NewPulsar(timePeriod, timeUnit),
 		context:     ctx,
 		consumerLog: ctrl.Log.WithName("event consumer"),
@@ -55,6 +55,14 @@ func (e *EventConsumer) Start() {
 			continue
 		}
 
+		if payload.Critical {
+			// include logs
+			err := e.injectLogs(payload)
+			if err != nil {
+				e.consumerLog.Error(err, "unable to inject logs")
+			}
+		}
+
 		if err = e.doHTTPPost(payload); err != nil {
 			// log error
 			e.consumerLog.Error(err, "error sending HTTP request to porter server")
@@ -68,6 +76,16 @@ func (e *EventConsumer) Start() {
 			}
 		}
 	}
+}
+
+func (e *EventConsumer) injectLogs(payload *models.EventDetails) error {
+	logs, err := e.redisClient.GetDetails(e.context, payload.ResourceType.String(), payload.Namespace, payload.Name)
+	if err != nil {
+		return err
+	}
+
+	payload.Data = logs
+	return nil
 }
 
 // doHTTPRequest tries to do a POST http request to the porter
