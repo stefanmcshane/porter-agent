@@ -6,6 +6,7 @@ import (
 	"time"
 
 	goredis "github.com/go-redis/redis/v8"
+	porterErrors "github.com/porter-dev/porter-agent/pkg/errors"
 )
 
 const (
@@ -33,14 +34,14 @@ func NewClient(host, port, username, password string, db int, maxEntries int64) 
 	}
 }
 
-func (r *Client) AppendAndTrimDetails(ctx context.Context, resourceType, namespace, name string, details []string) error {
+func (c *Client) AppendAndTrimDetails(ctx context.Context, resourceType, namespace, name string, details []string) error {
 	key := fmt.Sprintf("%s:%s:%s", resourceType, namespace, name)
-	_, err := r.client.LPush(ctx, key, details).Result()
+	_, err := c.client.LPush(ctx, key, details).Result()
 	if err != nil {
 		return err
 	}
 
-	_, err = r.client.LTrim(ctx, key, 0, r.maxEntries).Result()
+	_, err = c.client.LTrim(ctx, key, 0, c.maxEntries).Result()
 	if err != nil {
 		return err
 	}
@@ -48,13 +49,56 @@ func (r *Client) AppendAndTrimDetails(ctx context.Context, resourceType, namespa
 	return nil
 }
 
-func (r *Client) AppendToNotifyWorkQueue(ctx context.Context, packed []byte) error {
+func (c *Client) AppendToNotifyWorkQueue(ctx context.Context, packed []byte) error {
 	key := "pending"
 
-	_, err := r.client.ZAdd(ctx, key, &goredis.Z{
+	_, err := c.client.ZAdd(ctx, key, &goredis.Z{
 		Score:  float64(time.Now().Unix()),
 		Member: packed,
 	}).Result()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) GetItemFromPendingQueue(ctx context.Context) ([]byte, float64, error) {
+	key := "pending"
+
+	// check if there's any item in pending queue
+	count, err := c.client.Exists(ctx, key).Result()
+	if err != nil {
+		return []byte{}, 0, err
+	}
+
+	if count == 0 {
+		return []byte{}, 0, porterErrors.NoPendingItemError
+	}
+
+	value, err := c.client.ZPopMin(ctx, key).Result()
+	if err != nil {
+		return []byte{}, 0, err
+	}
+
+	// cast the member to byte array which was originally stored in the array
+	member := value[0].Member
+	rawBytes, ok := member.(string)
+	if !ok {
+		return []byte{}, 0, fmt.Errorf("cannot caste item to bytearray, actual type: %T", member)
+	}
+
+	return []byte(rawBytes), value[0].Score, nil
+}
+
+func (c *Client) RequeueItemWithScore(ctx context.Context, packed []byte, score float64) error {
+	key := "pending"
+
+	_, err := c.client.ZAdd(ctx, key, &goredis.Z{
+		Score:  score,
+		Member: packed,
+	}).Result()
+
 	if err != nil {
 		return err
 	}
