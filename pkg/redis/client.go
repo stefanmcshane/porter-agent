@@ -49,6 +49,11 @@ func (c *Client) AppendAndTrimDetails(ctx context.Context, resourceType, namespa
 	return nil
 }
 
+func (c *Client) GetDetails(ctx context.Context, resourceType, namespace, name string) ([]string, error) {
+	key := fmt.Sprintf("%s:%s:%s", resourceType, namespace, name)
+	return c.client.LRange(ctx, key, 0, -1).Result()
+}
+
 func (c *Client) AppendToNotifyWorkQueue(ctx context.Context, packed []byte) error {
 	key := "pending"
 
