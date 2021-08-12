@@ -1,3 +1,12 @@
+.EXPORT_ALL_VARIABLES:
+REDIS_HOST = localhost
+PORTER_HOST = http://localhost
+PORTER_PORT = 8080
+PORTER_TOKEN =
+CLUSTER_ID = 4
+PROJECT_ID = 1
+
+
 CLUSTER_NAME ?= porter-test-cluster
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest

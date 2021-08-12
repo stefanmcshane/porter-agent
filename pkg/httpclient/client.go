@@ -43,7 +43,7 @@ func (c *Client) Post(path string, body interface{}) (*http.Response, error) {
 		return nil, err
 	}
 
-	req.Header.Set("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOiIxNjI4NzA0MTIwIiwiaWJ5IjoxLCJwcm9qZWN0X2lkIjowLCJzdWIiOiIxIiwic3ViX2tpbmQiOiJ1c2VyIn0.kLoyKTvHqm5FGkkQZvtb030z8iJLVdGyIp5HcsN4iyU")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.token))
 	req.Header.Set("Content-Type", "application/json")
 
 	return c.client.Do(req)

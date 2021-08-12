@@ -8,6 +8,7 @@ import (
 
 	"github.com/porter-dev/porter-agent/pkg/models"
 	"github.com/porter-dev/porter-agent/pkg/redis"
+	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
@@ -15,6 +16,23 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var (
+	redisHost    string
+	redisPort    string
+	maxTailLines int64
+)
+
+func init() {
+	viper.SetDefault("REDIS_HOST", "porter-redis")
+	viper.SetDefault("REDIS_PORT", "6379")
+	viper.SetDefault("MAX_TAIL_LINES", int64(100))
+	viper.AutomaticEnv()
+
+	redisHost = viper.GetString("REDIS_HOST")
+	redisPort = viper.GetString("REDIS_PORT")
+	maxTailLines = viper.GetInt64("MAX_TAIL_LINES")
+}
 
 // PodEventProcessor is the pod processor that holds
 // a kube clientset, a redis client and the resource type
@@ -32,21 +50,19 @@ func NewPodEventProcessor(config *rest.Config) Interface {
 	return &PodEventProcessor{
 		kubeClient:   kubernetes.NewForConfigOrDie(config),
 		resourceType: models.PodResource,
-		redisClient:  redis.NewClient("127.0.0.1", "6379", "", "", redis.PODSTORE, int64(100)),
+		redisClient:  redis.NewClient(redisHost, redisPort, "", "", redis.PODSTORE, maxTailLines),
 	}
 }
 
 // EnqueueWithLogLines is used in case of normal events to store and update logs
 func (p *PodEventProcessor) EnqueueWithLogLines(ctx context.Context, object types.NamespacedName) {
-	maxTailLines := new(int64)
-	*maxTailLines = 100
 	logger := log.FromContext(ctx)
 
 	req := p.kubeClient.
 		CoreV1().
 		Pods(object.Namespace).
 		GetLogs(object.Name, &corev1.PodLogOptions{
-			TailLines: maxTailLines,
+			TailLines: &maxTailLines,
 		})
 
 	podLogs, err := req.Stream(ctx)

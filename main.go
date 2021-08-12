@@ -49,9 +49,6 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	// create the event consumer
-	eventConsumer = consumer.NewEventConsumer(50, time.Millisecond, context.TODO())
-
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -59,7 +56,7 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8000", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
@@ -103,6 +100,10 @@ func main() {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
+
+	// create the event consumer
+	setupLog.Info("creating event consumer")
+	eventConsumer = consumer.NewEventConsumer(50, time.Millisecond, context.TODO())
 
 	setupLog.Info("starting event consumer")
 	go eventConsumer.Start()
