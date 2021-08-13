@@ -96,7 +96,14 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default | kubectl apply -f -
+	$(KUSTOMIZE) build config/default > controller.yaml #kubectl apply -f -
+
+resolve-helm-deps:
+	helm dependency update charts/porter-agent
+deploy-helm: resolve-helm-deps
+	helm install porter-agent charts/porter-agent --set agent.image=${IMG} --values charts/porter-agent/test.values.yaml -n porter-agent-system --create-namespace
+uninstall-helm:
+	helm uninstall -n porter-agent-system porter-agent
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/default | kubectl delete -f -
