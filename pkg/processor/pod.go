@@ -24,7 +24,7 @@ var (
 )
 
 func init() {
-	viper.SetDefault("REDIS_HOST", "porter-redis")
+	viper.SetDefault("REDIS_HOST", "porter-redis-master")
 	viper.SetDefault("REDIS_PORT", "6379")
 	viper.SetDefault("MAX_TAIL_LINES", int64(100))
 	viper.AutomaticEnv()
