@@ -32,7 +32,10 @@ spec:
         - --leader-elect
         command:
         - /manager
-        image: controller:latest
+        image: "{{ .Values.agent.image }}"
+        envFrom:
+        - configMapRef:
+            name: porter-agent-config
         livenessProbe:
           httpGet:
             path: /healthz
@@ -57,5 +60,9 @@ spec:
           allowPrivilegeEscalation: false
       securityContext:
         runAsNonRoot: true
+      {{- if .Values.agent.privateRegistry.enabled }}
+      imagePullSecrets:
+        - name: "{{ .Values.agent.privateRegistry.url }}"
+      {{- end }}
       serviceAccountName: porter-agent-controller-manager
       terminationGracePeriodSeconds: 10

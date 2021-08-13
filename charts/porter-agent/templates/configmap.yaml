@@ -17,3 +17,18 @@ metadata:
   name: porter-agent-manager-config
   namespace: porter-agent-system
 
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: porter-agent-config
+  namespace: porter-agent-system
+data:
+  REDIS_HOST: {{ printf "%s-master" .Values.redis.fullnameOverride }}
+  PORTER_HOST: {{ .Values.agent.porterHost }}
+  PORTER_PORT: "{{ .Values.agent.porterPort }}"
+  PORTER_TOKEN: '{{ .Values.agent.porterToken }}'
+  CLUSTER_ID: "{{ .Values.agent.clusterID }}"
+  PROJECT_ID: "{{ .Values.agent.projectID }}"
+    
