@@ -22,6 +22,7 @@ import (
 
 	"github.com/porter-dev/porter-agent/pkg/models"
 	"github.com/porter-dev/porter-agent/pkg/processor"
+	"github.com/porter-dev/porter-agent/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -77,18 +78,37 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	// check ready condition
-	for _, condition := range instance.Status.Conditions {
-		if condition.Type == corev1.PodReady {
-			if condition.Status == corev1.ConditionFalse {
-				// pod is experiencing issues and is not
-				// in ready condition, hence trigger notification
-				r.triggerNotify(ctx, req, instance, true)
-				return ctrl.Result{}, nil
-			}
-		}
+	// for _, condition := range instance.Status.Conditions {
+	// 	if condition.Type == corev1.PodReady {
+	// 		if condition.Status == corev1.ConditionFalse {
+	// 			// pod is experiencing issues and is not
+	// 			// in ready condition, hence trigger notification
+	// 			r.triggerNotify(ctx, req, instance, true)
+	// 			return ctrl.Result{}, nil
+	// 		}
+	// 	}
+	// }
+
+	// check latest condition by sorting
+	utils.PodConditionsSorter(instance.Status.Conditions, true)
+
+	// in case status conditions are not yet set for the pod
+	// reconcile the event
+	if len(instance.Status.Conditions) == 0 {
+		reqLogger.Info("empty status conditions....reconciling")
+		return ctrl.Result{Requeue: true}, nil
 	}
 
-	if instance.Status.Phase != corev1.PodPending {
+	latestCondition := instance.Status.Conditions[0]
+
+	if latestCondition.Status == corev1.ConditionFalse {
+		// latest condition status is false, hence trigger notification
+		r.triggerNotify(ctx, req, instance, true)
+		return ctrl.Result{}, nil
+	}
+
+	if (instance.Status.Phase != corev1.PodPending) &&
+		(instance.Status.Phase != corev1.PodFailed) {
 		// trigger with critical false
 		r.triggerNotify(ctx, req, instance, false)
 
@@ -115,14 +135,18 @@ func (r *PodReconciler) triggerNotify(ctx context.Context, req ctrl.Request, ins
 }
 
 func (r *PodReconciler) getReasonAndMessage(instance *corev1.Pod) (string, string) {
-	for _, condition := range instance.Status.Conditions {
-		if condition.Type == corev1.PodReady &&
-			condition.Status != corev1.ConditionTrue {
-			return condition.Reason, condition.Message
-		}
-	}
+	// for _, condition := range instance.Status.Conditions {
+	// 	if condition.Type == corev1.PodReady &&
+	// 		condition.Status != corev1.ConditionTrue {
+	// 		return condition.Reason, condition.Message
+	// 	}
+	// }
 
-	return "", ""
+	// since list is already sorted in place now, hence the first condition
+	// is the latest, get its reason and message
+
+	latest := instance.Status.Conditions[0]
+	return latest.Reason, latest.Message
 }
 
 // SetupWithManager sets up the controller with the Manager.
