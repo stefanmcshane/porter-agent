@@ -7,6 +7,7 @@ import (
 
 	goredis "github.com/go-redis/redis/v8"
 	porterErrors "github.com/porter-dev/porter-agent/pkg/errors"
+	"github.com/porter-dev/porter-agent/pkg/models"
 )
 
 const (
@@ -104,6 +105,44 @@ func (c *Client) RequeueItemWithScore(ctx context.Context, packed []byte, score 
 		Member: packed,
 	}).Result()
 
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) RegisterErroredItem(ctx context.Context, resourceType models.EventResourceType, namespace, name string) error {
+	key := fmt.Sprintf("errors:%s:%s:%s", resourceType, namespace, name)
+
+	err := c.client.Set(ctx, key, true, 0).Err()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) ErroredItemExists(ctx context.Context, resourceType models.EventResourceType, namespace, name string) (bool, error) {
+	key := fmt.Sprintf("errors:%s:%s:%s", resourceType, namespace, name)
+
+	val, err := c.client.Exists(ctx, key).Result()
+	if err != nil {
+		return false, err
+	}
+
+	if val > 0 {
+		return true, nil
+	}
+
+	return false, nil
+
+}
+
+func (c *Client) DeleteErroredItem(ctx context.Context, resourceType models.EventResourceType, namespace, name string) error {
+	key := fmt.Sprintf("errors:%s:%s:%s", resourceType, namespace, name)
+
+	err := c.client.Del(ctx, key).Err()
 	if err != nil {
 		return err
 	}
