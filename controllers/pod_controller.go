@@ -73,7 +73,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	if instance.Status.Phase == corev1.PodFailed ||
 		instance.Status.Phase == corev1.PodUnknown {
 		// critical condition, must trigger a notification
-		r.triggerNotify(ctx, req, instance, true)
+		r.addToQueue(ctx, req, instance, true)
 		return ctrl.Result{}, nil
 	}
 
@@ -103,26 +103,26 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	if latestCondition.Status == corev1.ConditionFalse {
 		// latest condition status is false, hence trigger notification
-		r.triggerNotify(ctx, req, instance, true)
+		r.addToQueue(ctx, req, instance, true)
 		return ctrl.Result{}, nil
 	}
 
 	if (instance.Status.Phase != corev1.PodPending) &&
 		(instance.Status.Phase != corev1.PodFailed) {
 		// trigger with critical false
-		r.triggerNotify(ctx, req, instance, false)
+		r.addToQueue(ctx, req, instance, false)
 
 		// normal event, fetch and enqueue latest logs
 		reqLogger.Info("processing logs for pod", "status", instance.Status)
-		r.Processor.EnqueueWithLogLines(ctx, req.NamespacedName)
+		r.Processor.EnqueueDetails(ctx, req.NamespacedName)
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *PodReconciler) triggerNotify(ctx context.Context, req ctrl.Request, instance *corev1.Pod, isCritical bool) {
+func (r *PodReconciler) addToQueue(ctx context.Context, req ctrl.Request, instance *corev1.Pod, isCritical bool) {
 	reason, message := r.getReasonAndMessage(instance)
-	r.Processor.TriggerNotifyForEvent(ctx, req.NamespacedName,
+	r.Processor.AddToWorkQueue(ctx, req.NamespacedName,
 		models.EventDetails{
 			ResourceType: models.PodResource,
 			Name:         req.Name,

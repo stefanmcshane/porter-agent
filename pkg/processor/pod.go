@@ -54,8 +54,8 @@ func NewPodEventProcessor(config *rest.Config) Interface {
 	}
 }
 
-// EnqueueWithLogLines is used in case of normal events to store and update logs
-func (p *PodEventProcessor) EnqueueWithLogLines(ctx context.Context, object types.NamespacedName) {
+// EnqueueDetails is used in case of normal events to store and update logs
+func (p *PodEventProcessor) EnqueueDetails(ctx context.Context, object types.NamespacedName) {
 	logger := log.FromContext(ctx)
 
 	req := p.kubeClient.
@@ -89,31 +89,70 @@ func (p *PodEventProcessor) EnqueueWithLogLines(ctx context.Context, object type
 	}
 }
 
-// TriggerNotifyForEvent is supposed to trigger actual
-// request for porter server in case of a Delete or
-// Failed/Unknown Phase over HTTP. If that fails, it stores
+// AddToWorkQueue is supposed to check if the event's object is
+// present in error register, here we might have the following cases:
+//	1. object in the error register
+//		- current event is non critical
+//			- push to work queue as this means transition from error to healthy state
+//			- remove from error register as this should be marked as healthy now
+//		- current event is critical
+//			- push to work queue as its the repeat occurance of the same error
+//			  however this can be turned off in future to significantly reduce the
+//			  the repeated events of long errored pods
+//	2. object not in error register
+//		- current event is not critical
+//			- don't push the event to work queue, just let it be used for log refresh
+//		- current event is critical
+//			- add to register
+//			- push to work queue
 // the relevant event in a work queue
-func (p *PodEventProcessor) TriggerNotifyForEvent(ctx context.Context, object types.NamespacedName, details models.EventDetails) {
+func (p *PodEventProcessor) AddToWorkQueue(ctx context.Context, object types.NamespacedName, details models.EventDetails) {
 	logger := log.FromContext(ctx)
 	logger.Info("notification triggered")
 
 	logger.Info("current pod condition", "details", details)
 
-	// call HTTP client and try posting on the porter server
-	// in case of failure, append to the NotifyWorkQueue in redis
+	exists, err := p.redisClient.ErroredItemExists(ctx, p.resourceType, object.Namespace, object.Name)
+	if err != nil {
+		logger.Error(err, "unable to check items existence in error register")
+	}
 
-	// TODO: implement/call HTTP layer
+	if exists {
+		err := p.pushToWorkQueue(ctx, details)
+		if err != nil {
+			logger.Error(err, "unable to push items to work queue")
+		}
 
-	// assume HTTP failed, push to redis work queue
+		if !details.Critical {
+			// delete from error register
+			err := p.redisClient.DeleteErroredItem(ctx, p.resourceType, object.Namespace, object.Name)
+			if err != nil {
+				logger.Error(err, "unable to delete item from error register")
+			}
+		}
+	} else if details.Critical {
+		err := p.redisClient.RegisterErroredItem(ctx, p.resourceType, object.Namespace, object.Name)
+		if err != nil {
+			logger.Error(err, "unable to register errored item")
+		}
+
+		err = p.pushToWorkQueue(ctx, details)
+		if err != nil {
+			logger.Error(err, "unable to push item to work queue")
+		}
+	}
+}
+
+func (p *PodEventProcessor) pushToWorkQueue(ctx context.Context, details models.EventDetails) error {
 	packed, err := json.Marshal(details)
 	if err != nil {
-		logger.Error(err, "unable to marshal details to a json object")
-		return
+		return err
 	}
 
 	err = p.redisClient.AppendToNotifyWorkQueue(ctx, packed)
 	if err != nil {
-		logger.Error(err, "unable to push notify to work queue")
-		return
+		return err
 	}
+
+	return nil
 }
