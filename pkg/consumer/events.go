@@ -102,11 +102,20 @@ func (e *EventConsumer) Start() {
 		}
 
 		if payload.Critical {
+			payload.EventType = models.EventCritical
+
 			// include logs
 			err := e.injectLogs(payload)
 			if err != nil {
 				e.consumerLog.Error(err, "unable to inject logs")
 			}
+		} else {
+			payload.EventType = models.EventNormal
+		}
+
+		// in case of un-healthy to healthy pod transition, check and populate the message field
+		if payload.Message == "" {
+			payload.Message = models.UnhealthyToHealthyTransitionMessage
 		}
 
 		if err = e.doHTTPPost(payload); err != nil {

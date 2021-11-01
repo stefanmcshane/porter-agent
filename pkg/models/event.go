@@ -10,7 +10,18 @@ const (
 	PodResource  EventResourceType = "Pod"
 	HAPResource  EventResourceType = "HPA"
 	NodeResource EventResourceType = "Node"
+
+	EventCritical EventCriticality = "Critical"
+	EventNormal   EventCriticality = "Normal"
+
+	UnhealthyToHealthyTransitionMessage string = "Pod transitioned from unhealthy to healthy state"
 )
+
+type EventCriticality string
+
+func (e *EventCriticality) String() string {
+	return string(*e)
+}
 
 type EventDetails struct {
 	ResourceType EventResourceType `json:"resource_type"`
@@ -22,4 +33,5 @@ type EventDetails struct {
 	Data         []string          `json:"data"`
 	Critical     bool              `json:"critical"`
 	Timestamp    string            `json:"timestamp"`
+	EventType    EventCriticality  `json:"event_type"`
 }
