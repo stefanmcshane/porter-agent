@@ -141,17 +141,17 @@ func (e *EventConsumer) doHTTPPost(payload *models.EventDetails) error {
 	response, err := e.httpClient.Post(fmt.Sprintf("/api/projects/%s/clusters/%s/kube_events", projectID, clusterID), payload)
 	if err != nil {
 		// log and return error
-		e.consumerLog.Error(err, "error sending http request")
+		e.consumerLog.Error(err, "error sending http request", "namespace", payload.Namespace, "name", payload.Name)
 		return err
 	}
 	defer response.Body.Close()
 
 	// log response and return
-	e.consumerLog.Info("received response from server", "status", response.Status)
+	e.consumerLog.Info("received response from server", "status", response.Status, "namespace", payload.Namespace, "name", payload.Name)
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		// log error and return
-		e.consumerLog.Error(err, "error reading response body")
+		e.consumerLog.Error(err, "error reading response body", "namespace", payload.Namespace, "name", payload.Name)
 		return err
 	}
 
