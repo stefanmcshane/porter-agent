@@ -138,7 +138,7 @@ func (e *EventConsumer) injectLogs(payload *models.EventDetails) error {
 // server and returns an error if any. Its the responsibility of the caller
 // to retain the object in case the requests fails or times out
 func (e *EventConsumer) doHTTPPost(payload *models.EventDetails) error {
-	response, err := e.httpClient.Post(fmt.Sprintf("/api/projects/%s/clusters/%s/events", projectID, clusterID), payload)
+	response, err := e.httpClient.Post(fmt.Sprintf("/api/projects/%s/clusters/%s/kube_events", projectID, clusterID), payload)
 	if err != nil {
 		// log and return error
 		e.consumerLog.Error(err, "error sending http request")
