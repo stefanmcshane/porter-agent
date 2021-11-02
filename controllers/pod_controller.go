@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/porter-dev/porter-agent/pkg/models"
@@ -114,7 +115,14 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 		// normal event, fetch and enqueue latest logs
 		reqLogger.Info("processing logs for pod", "status", instance.Status)
-		r.Processor.EnqueueDetails(ctx, req.NamespacedName)
+
+		if len(instance.Spec.Containers) > 1 {
+			r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{
+				ContainerNamesToFetchLogs: []string{instance.Spec.Containers[0].Name},
+			})
+		} else {
+			r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{})
+		}
 	}
 
 	return ctrl.Result{}, nil
@@ -131,6 +139,8 @@ func (r *PodReconciler) addToQueue(ctx context.Context, req ctrl.Request, instan
 			Reason:       reason,
 			Critical:     isCritical,
 			Timestamp:    getTime(),
+			Phase:        string(instance.Status.Phase),
+			Status:       fmt.Sprintf("Type: %s, Status: %s", instance.Status.Conditions[0].Type, instance.Status.Conditions[0].Status),
 		})
 }
 

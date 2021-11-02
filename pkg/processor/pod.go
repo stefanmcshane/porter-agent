@@ -55,15 +55,19 @@ func NewPodEventProcessor(config *rest.Config) Interface {
 }
 
 // EnqueueDetails is used in case of normal events to store and update logs
-func (p *PodEventProcessor) EnqueueDetails(ctx context.Context, object types.NamespacedName) {
+func (p *PodEventProcessor) EnqueueDetails(ctx context.Context, object types.NamespacedName, options *EnqueueDetailOptions) {
 	logger := log.FromContext(ctx)
+
+	logOptions := &corev1.PodLogOptions{
+		TailLines: &maxTailLines,
+	}
+
+	options.SetContainerName(logOptions)
 
 	req := p.kubeClient.
 		CoreV1().
 		Pods(object.Namespace).
-		GetLogs(object.Name, &corev1.PodLogOptions{
-			TailLines: &maxTailLines,
-		})
+		GetLogs(object.Name, logOptions)
 
 	podLogs, err := req.Stream(ctx)
 	if err != nil {
@@ -81,6 +85,7 @@ func (p *PodEventProcessor) EnqueueDetails(ctx context.Context, object types.Nam
 
 	strLogs := logs.String()
 	logger.Info("Successfully fetched logs")
+
 	// update logs in the redis store
 	err = p.redisClient.AppendAndTrimDetails(ctx, p.resourceType.String(), object.Namespace, object.Name, strings.Split(strLogs, "\n"))
 	if err != nil {
