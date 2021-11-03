@@ -36,7 +36,7 @@ func NewClient(host, port, username, password string, db int, maxEntries int64) 
 }
 
 func (c *Client) AppendAndTrimDetails(ctx context.Context, resourceType, namespace, name string, details []string) error {
-	key := fmt.Sprintf("%s:%s:%s", resourceType, namespace, name)
+	key := fmt.Sprintf("%s:%s:%s:%d", resourceType, namespace, name, time.Now().Unix())
 	_, err := c.client.LPush(ctx, key, details).Result()
 	if err != nil {
 		return err
