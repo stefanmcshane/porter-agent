@@ -3,6 +3,7 @@ package handlers
 import (
 	"github.com/porter-dev/porter-agent/pkg/redis"
 	"github.com/spf13/viper"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 var (
@@ -11,6 +12,8 @@ var (
 	maxTailLines int64
 
 	redisClient *redis.Client
+
+	httpLogger = ctrl.Log.WithName("HTTP Server")
 )
 
 func init() {
