@@ -1,24 +1,20 @@
 package handlers
 
 import (
-	"context"
 	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-logr/logr"
 	"github.com/porter-dev/porter-agent/pkg/models"
 )
 
-func GetLogBuckets(c *gin.Context) {
-	logger := logr.FromContext(c)
-
+func ListLogBuckets(c *gin.Context) {
 	podName := c.Param("podName")
 	namespace := c.Param("namespace")
 
-	keys, err := redisClient.GetKeysForResource(context.Background(), models.PodResource, namespace, podName)
+	keys, err := redisClient.GetKeysForResource(c.Copy(), models.PodResource, namespace, podName)
 	if err != nil {
-		logger.Error(err, "cannot get keys for the resource")
+		httpLogger.Error(err, "cannot get keys for the resource")
 		log.Println("cannot get keys for resource. error:", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
@@ -28,8 +24,9 @@ func GetLogBuckets(c *gin.Context) {
 	}
 
 	if len(keys) == 0 {
+		httpLogger.Info("not log buckets found for the requested resource")
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "cannot find any keys for that pattern",
+			"error": "cannot find any log buckets for the requested resource",
 		})
 
 		return
@@ -37,5 +34,25 @@ func GetLogBuckets(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"availableLogBuckets": keys,
+	})
+}
+
+func GetLogBucket(c *gin.Context) {
+	podName := c.Param("podName")
+	namespace := c.Param("namespace")
+	bucket := c.Param("bucket")
+
+	keys, err := redisClient.SearchBestMatchForBucket(c.Copy(), models.PodResource, namespace, podName, bucket)
+	if err != nil {
+		httpLogger.Error(err, "cannot get the best match for the log bucket")
+		c.JSON(http.StatusNoContent, gin.H{
+			"error": err.Error(),
+		})
+
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"logs": keys,
 	})
 }
