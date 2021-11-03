@@ -149,3 +149,9 @@ func (c *Client) DeleteErroredItem(ctx context.Context, resourceType models.Even
 
 	return nil
 }
+
+func (c *Client) GetKeysForResource(ctx context.Context, resourceType models.EventResourceType, namespace, name string) ([]string, error) {
+	pattern := fmt.Sprintf("%s:%s:%s:*", resourceType, namespace, name)
+
+	return c.client.Keys(ctx, pattern).Result()
+}
