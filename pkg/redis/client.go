@@ -155,3 +155,26 @@ func (c *Client) GetKeysForResource(ctx context.Context, resourceType models.Eve
 
 	return c.client.Keys(ctx, pattern).Result()
 }
+
+func (c *Client) SearchBestMatchForBucket(ctx context.Context, resourceType models.EventResourceType, namespace, name, timestamp string) ([]string, error) {
+	// tsInt64, err := strconv.ParseInt(timestamp, 10, 64)
+	// if err != nil {
+	// 	logger.Error(err, "unable to convert bucket to a valid int64")
+	// }
+
+	// timestamp := time.Unix(tsInt64, 0)
+
+	// try exact match
+	key := fmt.Sprintf("%s:%s:%s:%s", resourceType, namespace, name, timestamp)
+	exists, err := c.client.Exists(ctx, key).Result()
+	if err != nil {
+		return []string{}, err
+	}
+
+	if exists == 1 {
+		// exact match
+		return c.client.LRange(ctx, key, 0, -1).Result()
+	}
+
+	return []string{}, fmt.Errorf("not an exact match")
+}
