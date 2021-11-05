@@ -3,6 +3,8 @@ package redis
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	goredis "github.com/go-redis/redis/v8"
@@ -156,25 +158,57 @@ func (c *Client) GetKeysForResource(ctx context.Context, resourceType models.Eve
 	return c.client.Keys(ctx, pattern).Result()
 }
 
-func (c *Client) SearchBestMatchForBucket(ctx context.Context, resourceType models.EventResourceType, namespace, name, timestamp string) ([]string, error) {
-	// tsInt64, err := strconv.ParseInt(timestamp, 10, 64)
-	// if err != nil {
-	// 	logger.Error(err, "unable to convert bucket to a valid int64")
-	// }
-
-	// timestamp := time.Unix(tsInt64, 0)
+// SearchBestMatchForBucket first tries an exact match to return
+// else resourts to matching the closest match for the given timestamp
+func (c *Client) SearchBestMatchForBucket(ctx context.Context, resourceType models.EventResourceType, namespace, name, timestamp string) ([]string, string, error) {
+	// see if passed in value is even a valid timestamp
+	_, err := strconv.ParseInt(timestamp, 10, 64)
+	if err != nil {
+		return []string{}, "", err
+	}
 
 	// try exact match
 	key := fmt.Sprintf("%s:%s:%s:%s", resourceType, namespace, name, timestamp)
 	exists, err := c.client.Exists(ctx, key).Result()
 	if err != nil {
-		return []string{}, err
+		return []string{}, "", err
 	}
 
 	if exists == 1 {
 		// exact match
-		return c.client.LRange(ctx, key, 0, -1).Result()
+		match, err := c.client.LRange(ctx, key, 0, -1).Result()
+		return match, timestamp, err
 	}
 
-	return []string{}, fmt.Errorf("not an exact match")
+	// else get list of keys
+	pattern := fmt.Sprintf("%s:%s:%s:*", resourceType, namespace, name)
+	keys, err := c.client.Keys(ctx, pattern).Result()
+	if err != nil {
+		return []string{}, "", err
+	}
+
+	oldest := "0"
+
+	for _, k := range keys {
+		splits := strings.Split(k, ":")
+		ts := splits[len(splits)-1]
+
+		//fmt.Println("comparing", ts, key)
+
+		if ts <= timestamp {
+			if ts >= oldest {
+				oldest = ts
+			}
+		}
+	}
+
+	if oldest == "0" {
+		return []string{}, "", fmt.Errorf("cannot find a match")
+	}
+
+	// match for the key has been found, return the contents for that key
+	matchPattern := fmt.Sprintf("%s:%s:%s:%s", resourceType, namespace, name, oldest)
+	match, err := c.client.LRange(ctx, matchPattern, 0, -1).Result()
+
+	return match, oldest, err
 }

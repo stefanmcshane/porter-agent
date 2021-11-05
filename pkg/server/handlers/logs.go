@@ -42,10 +42,10 @@ func GetLogBucket(c *gin.Context) {
 	namespace := c.Param("namespace")
 	bucket := c.Param("bucket")
 
-	keys, err := redisClient.SearchBestMatchForBucket(c.Copy(), models.PodResource, namespace, podName, bucket)
+	keys, matched, err := redisClient.SearchBestMatchForBucket(c.Copy(), models.PodResource, namespace, podName, bucket)
 	if err != nil {
 		httpLogger.Error(err, "cannot get the best match for the log bucket")
-		c.JSON(http.StatusNoContent, gin.H{
+		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})
 
@@ -53,6 +53,7 @@ func GetLogBucket(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"logs": keys,
+		"logs":          keys,
+		"matchedBucket": matched,
 	})
 }
