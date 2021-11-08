@@ -34,9 +34,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/gin-gonic/gin"
 	"github.com/porter-dev/porter-agent/controllers"
 	"github.com/porter-dev/porter-agent/pkg/consumer"
 	"github.com/porter-dev/porter-agent/pkg/processor"
+	"github.com/porter-dev/porter-agent/pkg/server/routes"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -44,6 +46,8 @@ var (
 	scheme        = runtime.NewScheme()
 	setupLog      = ctrl.Log.WithName("setup")
 	eventConsumer *consumer.EventConsumer
+
+	httpServer *gin.Engine
 )
 
 func init() {
@@ -107,6 +111,10 @@ func main() {
 
 	setupLog.Info("starting event consumer")
 	go eventConsumer.Start()
+
+	setupLog.Info("starting HTTP server")
+	httpServer = routes.NewRouter()
+	go httpServer.Run(":10001")
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {

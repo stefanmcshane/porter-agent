@@ -105,10 +105,10 @@ func (e *EventConsumer) Start() {
 			payload.EventType = models.EventCritical
 
 			// include logs
-			err := e.injectLogs(payload)
-			if err != nil {
-				e.consumerLog.Error(err, "unable to inject logs")
-			}
+			// err := e.injectLogs(payload)
+			// if err != nil {
+			// 	e.consumerLog.Error(err, "unable to inject logs")
+			// }
 		} else {
 			payload.EventType = models.EventNormal
 		}
@@ -117,6 +117,8 @@ func (e *EventConsumer) Start() {
 		if payload.Message == "" {
 			payload.Message = models.UnhealthyToHealthyTransitionMessage
 		}
+
+		e.consumerLog.Info("doing HTTP post", "detail", payload)
 
 		if err = e.doHTTPPost(payload); err != nil {
 			// log error
