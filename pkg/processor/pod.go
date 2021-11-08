@@ -111,7 +111,7 @@ func (p *PodEventProcessor) EnqueueDetails(ctx context.Context, object types.Nam
 //			- add to register
 //			- push to work queue
 // the relevant event in a work queue
-func (p *PodEventProcessor) AddToWorkQueue(ctx context.Context, object types.NamespacedName, details models.EventDetails) {
+func (p *PodEventProcessor) AddToWorkQueue(ctx context.Context, object types.NamespacedName, details *models.EventDetails) {
 	logger := log.Log.WithName("event-processor")
 
 	logger.Info("current pod condition", "details", details)
@@ -151,7 +151,7 @@ func (p *PodEventProcessor) AddToWorkQueue(ctx context.Context, object types.Nam
 	}
 }
 
-func (p *PodEventProcessor) pushToWorkQueue(ctx context.Context, details models.EventDetails) error {
+func (p *PodEventProcessor) pushToWorkQueue(ctx context.Context, details *models.EventDetails) error {
 	packed, err := json.Marshal(details)
 	if err != nil {
 		return err
