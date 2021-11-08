@@ -28,6 +28,8 @@ type EventDetails struct {
 	Name         string            `json:"name"`
 	Namespace    string            `json:"namespace"`
 	Cluster      string            `json:"cluster"`
+	OwnerName    string            `json:"owner_name"`
+	OwnerType    string            `json:"owner_type"`
 	Message      string            `json:"message"`
 	Reason       string            `json:"reason"`
 	Data         []string          `json:"data"`

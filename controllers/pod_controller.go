@@ -21,12 +21,16 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/porter-dev/porter-agent/pkg/models"
 	"github.com/porter-dev/porter-agent/pkg/processor"
 	"github.com/porter-dev/porter-agent/pkg/utils"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -37,6 +41,8 @@ type PodReconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
 	Processor processor.Interface
+
+	logger logr.Logger
 }
 
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
@@ -53,14 +59,14 @@ type PodReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	reqLogger := log.FromContext(ctx)
+	r.logger = log.FromContext(ctx)
 
 	instance := &corev1.Pod{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// must have been a delete event
-			reqLogger.Info("pod deleted")
+			r.logger.Info("pod deleted")
 
 			// TODO: triggerNotify
 			return ctrl.Result{}, nil
@@ -91,12 +97,14 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	// }
 
 	// check latest condition by sorting
+	// r.logger.Info("pod conditions before sorting", "conditions", instance.Status.Conditions)
 	utils.PodConditionsSorter(instance.Status.Conditions, true)
+	// r.logger.Info("pod conditions after sorting", "conditions", instance.Status.Conditions)
 
 	// in case status conditions are not yet set for the pod
 	// reconcile the event
 	if len(instance.Status.Conditions) == 0 {
-		reqLogger.Info("empty status conditions....reconciling")
+		r.logger.Info("empty status conditions....reconciling")
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -114,7 +122,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		r.addToQueue(ctx, req, instance, false)
 
 		// normal event, fetch and enqueue latest logs
-		reqLogger.Info("processing logs for pod", "status", instance.Status)
+		r.logger.Info("processing logs for pod", "status", instance.Status)
 
 		if len(instance.Spec.Containers) > 1 {
 			r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{
@@ -130,18 +138,21 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 func (r *PodReconciler) addToQueue(ctx context.Context, req ctrl.Request, instance *corev1.Pod, isCritical bool) {
 	reason, message := r.getReasonAndMessage(instance)
-	r.Processor.AddToWorkQueue(ctx, req.NamespacedName,
-		models.EventDetails{
-			ResourceType: models.PodResource,
-			Name:         req.Name,
-			Namespace:    req.Namespace,
-			Message:      message,
-			Reason:       reason,
-			Critical:     isCritical,
-			Timestamp:    getTime(),
-			Phase:        string(instance.Status.Phase),
-			Status:       fmt.Sprintf("Type: %s, Status: %s", instance.Status.Conditions[0].Type, instance.Status.Conditions[0].Status),
-		})
+	eventDetails := &models.EventDetails{
+		ResourceType: models.PodResource,
+		Name:         req.Name,
+		Namespace:    req.Namespace,
+		Message:      message,
+		Reason:       reason,
+		Critical:     isCritical,
+		Timestamp:    getTime(),
+		Phase:        string(instance.Status.Phase),
+		Status:       fmt.Sprintf("Type: %s, Status: %s", instance.Status.Conditions[0].Type, instance.Status.Conditions[0].Status),
+	}
+
+	r.populateOwnerDetails(ctx, req, instance, eventDetails)
+
+	r.Processor.AddToWorkQueue(ctx, req.NamespacedName, eventDetails)
 }
 
 func (r *PodReconciler) getReasonAndMessage(instance *corev1.Pod) (string, string) {
@@ -157,6 +168,61 @@ func (r *PodReconciler) getReasonAndMessage(instance *corev1.Pod) (string, strin
 
 	latest := instance.Status.Conditions[0]
 	return latest.Reason, latest.Message
+}
+
+func (r *PodReconciler) fetchReplicaSetOwner(ctx context.Context, req ctrl.Request) (*metav1.OwnerReference, error) {
+	rs := &appsv1.ReplicaSet{}
+
+	err := r.Client.Get(ctx, req.NamespacedName, rs)
+	if err != nil {
+		r.logger.Error(err, "cannot fetch replicaset object")
+		return nil, err
+	}
+
+	// get replicaset owner
+	owners := rs.ObjectMeta.OwnerReferences
+	if len(owners) == 0 {
+		r.logger.Info("no owner for teh replicaset", "replicaset name", req.NamespacedName)
+		return nil, fmt.Errorf("no owner defined for replicaset")
+	}
+
+	owner := owners[0]
+	return &owner, nil
+}
+
+func (r *PodReconciler) populateOwnerDetails(ctx context.Context, req ctrl.Request, pod *corev1.Pod, eventDetails *models.EventDetails) {
+	owners := pod.ObjectMeta.OwnerReferences
+
+	if len(owners) == 0 {
+		r.logger.Info("no owners defined for the pod")
+		return
+	}
+
+	// in case of multiple owners, take the first
+	var owner *metav1.OwnerReference
+	var err error
+
+	owner = &owners[0]
+
+	if owner.Kind == "ReplicaSet" {
+		r.logger.Info("fetching owner for replicaset")
+		owner, err = r.fetchReplicaSetOwner(ctx, ctrl.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      owner.Name,
+				Namespace: req.Namespace,
+			},
+		})
+
+		if err != nil {
+			r.logger.Error(err, "cannot fetch owner for replicaset")
+
+			return
+		}
+	}
+
+	eventDetails.OwnerName = owner.Name
+	eventDetails.OwnerType = owner.Kind
+
 }
 
 // SetupWithManager sets up the controller with the Manager.
