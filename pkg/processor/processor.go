@@ -17,7 +17,7 @@ type Interface interface {
 	EnqueueDetails(context context.Context, object types.NamespacedName, options *EnqueueDetailOptions)
 	// to trigger actual request for porter server in case of
 	// a Delete or Failed/Unknown Phase
-	AddToWorkQueue(context context.Context, object types.NamespacedName, details models.EventDetails)
+	AddToWorkQueue(context context.Context, object types.NamespacedName, details *models.EventDetails)
 }
 
 func (e *EnqueueDetailOptions) SetContainerName(podOptions *corev1.PodLogOptions) {
