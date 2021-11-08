@@ -34,4 +34,6 @@ type EventDetails struct {
 	Critical     bool              `json:"critical"`
 	Timestamp    string            `json:"timestamp"`
 	EventType    EventCriticality  `json:"event_type"`
+	Phase        string            `json:"pod_phase"`
+	Status       string            `json:"pod_status"`
 }
