@@ -118,6 +118,8 @@ func (e *EventConsumer) Start() {
 			payload.Message = models.UnhealthyToHealthyTransitionMessage
 		}
 
+		e.consumerLog.Info("doing HTTP post", "detail", payload)
+
 		if err = e.doHTTPPost(payload); err != nil {
 			// log error
 			e.consumerLog.Error(err, "error sending HTTP request to porter server")
