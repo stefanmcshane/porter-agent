@@ -56,7 +56,7 @@ func NewPodEventProcessor(config *rest.Config) Interface {
 
 // EnqueueDetails is used in case of normal events to store and update logs
 func (p *PodEventProcessor) EnqueueDetails(ctx context.Context, object types.NamespacedName, options *EnqueueDetailOptions) {
-	logger := log.FromContext(ctx)
+	logger := log.Log.WithName("event-processor")
 
 	logOptions := &corev1.PodLogOptions{
 		TailLines: &maxTailLines,
@@ -112,8 +112,7 @@ func (p *PodEventProcessor) EnqueueDetails(ctx context.Context, object types.Nam
 //			- push to work queue
 // the relevant event in a work queue
 func (p *PodEventProcessor) AddToWorkQueue(ctx context.Context, object types.NamespacedName, details models.EventDetails) {
-	logger := log.FromContext(ctx)
-	logger.Info("notification triggered")
+	logger := log.Log.WithName("event-processor")
 
 	logger.Info("current pod condition", "details", details)
 
@@ -123,6 +122,7 @@ func (p *PodEventProcessor) AddToWorkQueue(ctx context.Context, object types.Nam
 	}
 
 	if exists {
+		logger.Info("pushing to work queue")
 		err := p.pushToWorkQueue(ctx, details)
 		if err != nil {
 			logger.Error(err, "unable to push items to work queue")
@@ -130,17 +130,20 @@ func (p *PodEventProcessor) AddToWorkQueue(ctx context.Context, object types.Nam
 
 		if !details.Critical {
 			// delete from error register
+			logger.Info("deleting from error register")
 			err := p.redisClient.DeleteErroredItem(ctx, p.resourceType, object.Namespace, object.Name)
 			if err != nil {
 				logger.Error(err, "unable to delete item from error register")
 			}
 		}
 	} else if details.Critical {
+		logger.Info("adding to error register")
 		err := p.redisClient.RegisterErroredItem(ctx, p.resourceType, object.Namespace, object.Name)
 		if err != nil {
 			logger.Error(err, "unable to register errored item")
 		}
 
+		logger.Info("pushing to work queue")
 		err = p.pushToWorkQueue(ctx, details)
 		if err != nil {
 			logger.Error(err, "unable to push item to work queue")
