@@ -84,18 +84,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	// check ready condition
-	// for _, condition := range instance.Status.Conditions {
-	// 	if condition.Type == corev1.PodReady {
-	// 		if condition.Status == corev1.ConditionFalse {
-	// 			// pod is experiencing issues and is not
-	// 			// in ready condition, hence trigger notification
-	// 			r.triggerNotify(ctx, req, instance, true)
-	// 			return ctrl.Result{}, nil
-	// 		}
-	// 	}
-	// }
-
 	// check latest condition by sorting
 	// r.logger.Info("pod conditions before sorting", "conditions", instance.Status.Conditions)
 	utils.PodConditionsSorter(instance.Status.Conditions, true)
@@ -113,24 +101,20 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	if latestCondition.Status == corev1.ConditionFalse {
 		// latest condition status is false, hence trigger notification
 		r.addToQueue(ctx, req, instance, true)
-		return ctrl.Result{}, nil
-	}
-
-	if (instance.Status.Phase != corev1.PodPending) &&
-		(instance.Status.Phase != corev1.PodFailed) {
+	} else {
 		// trigger with critical false
 		r.addToQueue(ctx, req, instance, false)
+	}
 
-		// normal event, fetch and enqueue latest logs
-		r.logger.Info("processing logs for pod", "status", instance.Status)
+	// fetch and enqueue latest logs
+	r.logger.Info("processing logs for pod", "status", instance.Status)
 
-		if len(instance.Spec.Containers) > 1 {
-			r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{
-				ContainerNamesToFetchLogs: []string{instance.Spec.Containers[0].Name},
-			})
-		} else {
-			r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{})
-		}
+	if len(instance.Spec.Containers) > 1 {
+		r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{
+			ContainerNamesToFetchLogs: []string{instance.Spec.Containers[0].Name},
+		})
+	} else {
+		r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{})
 	}
 
 	return ctrl.Result{}, nil
@@ -151,18 +135,12 @@ func (r *PodReconciler) addToQueue(ctx context.Context, req ctrl.Request, instan
 	}
 
 	r.populateOwnerDetails(ctx, req, instance, eventDetails)
+	r.logger.Info("populated owner details", "details", eventDetails)
 
 	r.Processor.AddToWorkQueue(ctx, req.NamespacedName, eventDetails)
 }
 
 func (r *PodReconciler) getReasonAndMessage(instance *corev1.Pod) (string, string) {
-	// for _, condition := range instance.Status.Conditions {
-	// 	if condition.Type == corev1.PodReady &&
-	// 		condition.Status != corev1.ConditionTrue {
-	// 		return condition.Reason, condition.Message
-	// 	}
-	// }
-
 	// since list is already sorted in place now, hence the first condition
 	// is the latest, get its reason and message
 
