@@ -108,7 +108,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	// fetch and enqueue latest logs
 	r.logger.Info("processing logs for pod", "status", instance.Status)
-
 	if len(instance.Spec.Containers) > 1 {
 		r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{
 			ContainerNamesToFetchLogs: []string{instance.Spec.Containers[0].Name},
