@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -37,7 +38,17 @@ func NewClient(host, port, username, password string, db int, maxEntries int64) 
 	}
 }
 
-func (c *Client) AppendAndTrimDetails(ctx context.Context, resourceType, namespace, name string, details []string) error {
+func (c *Client) limitNumberOfBuckets(ctx context.Context, pattern string, limit int) {
+	keys := c.client.Keys(ctx, pattern).Val()
+
+	sort.Strings(keys)
+
+	if len(keys) > limit {
+		c.client.Del(ctx, keys[:len(keys)-limit]...).Val()
+	}
+}
+
+func (c *Client) AppendAndTrimDetails(ctx context.Context, resourceType models.EventResourceType, namespace, name string, details []string) error {
 	key := fmt.Sprintf("%s:%s:%s:%d", resourceType, namespace, name, time.Now().Unix())
 	_, err := c.client.LPush(ctx, key, details).Result()
 	if err != nil {
@@ -48,6 +59,15 @@ func (c *Client) AppendAndTrimDetails(ctx context.Context, resourceType, namespa
 	if err != nil {
 		return err
 	}
+
+	// set max TTL to 1 week
+	_, err = c.client.Expire(ctx, key, 24*7*time.Hour).Result()
+	if err != nil {
+		return err
+	}
+
+	// limit max number of buckets to 20
+	c.limitNumberOfBuckets(ctx, fmt.Sprintf("%s:%s:%s:*", resourceType, namespace, name), 20)
 
 	return nil
 }

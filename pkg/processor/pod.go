@@ -84,7 +84,7 @@ func (p *PodEventProcessor) EnqueueDetails(ctx context.Context, object types.Nam
 	}
 
 	strLogs := logs.String()
-	logger.Info("Successfully fetched logs")
+	logger.Info("Successfully fetched logs", "object", object)
 
 	// update logs in the redis store
 	err = p.redisClient.AppendAndTrimDetails(ctx, p.resourceType.String(), object.Namespace, object.Name, strings.Split(strLogs, "\n"))
