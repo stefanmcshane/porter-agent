@@ -143,8 +143,52 @@ func (r *PodReconciler) getReasonAndMessage(instance *corev1.Pod) (string, strin
 	// since list is already sorted in place now, hence the first condition
 	// is the latest, get its reason and message
 
-	latest := instance.Status.Conditions[0]
-	return latest.Reason, latest.Message
+	if len(instance.Spec.Containers) > 1 {
+		latest := instance.Status.Conditions[0]
+		r.logger.Info("multicontainer scenario", "latest", latest)
+
+		reason, message := latest.Reason, latest.Message
+
+		// check if a failing container is mentioned in the message
+		container, ok := utils.ExtractErroredContainer(message)
+		r.logger.Info("extracted errored containers", "container", container, "ok", ok)
+		if ok {
+			r.logger.Info("failing container in message")
+			// extract message and reason from given container
+			return r.extractFromContainerStatuses(container, instance)
+		}
+
+		return reason, message
+	}
+
+	r.logger.Info("extracting details from container statuses")
+	// since its a single container call with empty container name
+	return r.extractFromContainerStatuses("", instance)
+}
+
+func (r *PodReconciler) extractFromContainerStatuses(containerName string, instance *corev1.Pod) (string, string) {
+	var state corev1.ContainerState
+
+	if containerName == "" {
+		// this is from a pod with single container
+		state = instance.Status.ContainerStatuses[0].State
+	} else {
+		for _, status := range instance.Status.ContainerStatuses {
+			if status.Name == containerName {
+				state = status.State
+			}
+		}
+	}
+
+	if state.Running != nil {
+		return "", fmt.Sprintf("Container started at: %s", state.Running.StartedAt.Format(time.RFC3339))
+	}
+
+	if state.Terminated != nil {
+		return state.Terminated.Reason, state.Terminated.Message
+	}
+
+	return state.Waiting.Reason, state.Waiting.Message
 }
 
 func (r *PodReconciler) fetchReplicaSetOwner(ctx context.Context, req ctrl.Request) (*metav1.OwnerReference, error) {
