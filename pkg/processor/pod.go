@@ -84,10 +84,10 @@ func (p *PodEventProcessor) EnqueueDetails(ctx context.Context, object types.Nam
 	}
 
 	strLogs := logs.String()
-	logger.Info("Successfully fetched logs")
+	logger.Info("Successfully fetched logs", "object", object)
 
 	// update logs in the redis store
-	err = p.redisClient.AppendAndTrimDetails(ctx, p.resourceType.String(), object.Namespace, object.Name, strings.Split(strLogs, "\n"))
+	err = p.redisClient.AppendAndTrimDetails(ctx, p.resourceType, object.Namespace, object.Name, strings.Split(strLogs, "\n"))
 	if err != nil {
 		logger.Error(err, "unable to append logs to the store")
 		return

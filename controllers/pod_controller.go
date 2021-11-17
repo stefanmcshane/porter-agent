@@ -84,18 +84,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	// check ready condition
-	// for _, condition := range instance.Status.Conditions {
-	// 	if condition.Type == corev1.PodReady {
-	// 		if condition.Status == corev1.ConditionFalse {
-	// 			// pod is experiencing issues and is not
-	// 			// in ready condition, hence trigger notification
-	// 			r.triggerNotify(ctx, req, instance, true)
-	// 			return ctrl.Result{}, nil
-	// 		}
-	// 	}
-	// }
-
 	// check latest condition by sorting
 	// r.logger.Info("pod conditions before sorting", "conditions", instance.Status.Conditions)
 	utils.PodConditionsSorter(instance.Status.Conditions, true)
@@ -113,24 +101,19 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	if latestCondition.Status == corev1.ConditionFalse {
 		// latest condition status is false, hence trigger notification
 		r.addToQueue(ctx, req, instance, true)
-		return ctrl.Result{}, nil
-	}
-
-	if (instance.Status.Phase != corev1.PodPending) &&
-		(instance.Status.Phase != corev1.PodFailed) {
+	} else {
 		// trigger with critical false
 		r.addToQueue(ctx, req, instance, false)
+	}
 
-		// normal event, fetch and enqueue latest logs
-		r.logger.Info("processing logs for pod", "status", instance.Status)
-
-		if len(instance.Spec.Containers) > 1 {
-			r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{
-				ContainerNamesToFetchLogs: []string{instance.Spec.Containers[0].Name},
-			})
-		} else {
-			r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{})
-		}
+	// fetch and enqueue latest logs
+	r.logger.Info("processing logs for pod", "status", instance.Status)
+	if len(instance.Spec.Containers) > 1 {
+		r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{
+			ContainerNamesToFetchLogs: []string{instance.Spec.Containers[0].Name},
+		})
+	} else {
+		r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{})
 	}
 
 	return ctrl.Result{}, nil
@@ -151,23 +134,61 @@ func (r *PodReconciler) addToQueue(ctx context.Context, req ctrl.Request, instan
 	}
 
 	r.populateOwnerDetails(ctx, req, instance, eventDetails)
+	r.logger.Info("populated owner details", "details", eventDetails)
 
 	r.Processor.AddToWorkQueue(ctx, req.NamespacedName, eventDetails)
 }
 
 func (r *PodReconciler) getReasonAndMessage(instance *corev1.Pod) (string, string) {
-	// for _, condition := range instance.Status.Conditions {
-	// 	if condition.Type == corev1.PodReady &&
-	// 		condition.Status != corev1.ConditionTrue {
-	// 		return condition.Reason, condition.Message
-	// 	}
-	// }
-
 	// since list is already sorted in place now, hence the first condition
 	// is the latest, get its reason and message
 
-	latest := instance.Status.Conditions[0]
-	return latest.Reason, latest.Message
+	if len(instance.Spec.Containers) > 1 {
+		latest := instance.Status.Conditions[0]
+		r.logger.Info("multicontainer scenario", "latest", latest)
+
+		reason, message := latest.Reason, latest.Message
+
+		// check if a failing container is mentioned in the message
+		container, ok := utils.ExtractErroredContainer(message)
+		r.logger.Info("extracted errored containers", "container", container, "ok", ok)
+		if ok {
+			r.logger.Info("failing container in message")
+			// extract message and reason from given container
+			return r.extractFromContainerStatuses(container, instance)
+		}
+
+		return reason, message
+	}
+
+	r.logger.Info("extracting details from container statuses")
+	// since its a single container call with empty container name
+	return r.extractFromContainerStatuses("", instance)
+}
+
+func (r *PodReconciler) extractFromContainerStatuses(containerName string, instance *corev1.Pod) (string, string) {
+	var state corev1.ContainerState
+
+	if containerName == "" {
+		// this is from a pod with single container
+		state = instance.Status.ContainerStatuses[0].State
+	} else {
+		for _, status := range instance.Status.ContainerStatuses {
+			if status.Name == containerName {
+				state = status.State
+			}
+		}
+	}
+
+	if state.Running != nil {
+		return "", fmt.Sprintf("Container started at: %s", state.Running.StartedAt.Format(time.RFC3339))
+	}
+
+	if state.Terminated != nil {
+		return state.Terminated.Reason, state.Terminated.Message
+	}
+
+	return state.Waiting.Reason, state.Waiting.Message
 }
 
 func (r *PodReconciler) fetchReplicaSetOwner(ctx context.Context, req ctrl.Request) (*metav1.OwnerReference, error) {
