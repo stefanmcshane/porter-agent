@@ -26,3 +26,21 @@ func PodConditionsSorter(conditions []corev1.PodCondition, reverse bool) {
 		return reverse != t1.Before(t2)
 	})
 }
+
+func NodeConditionsSorter(conditions []corev1.NodeCondition, reverse bool) {
+	sort.SliceStable(conditions, func(i, j int) bool {
+		t1 := conditions[i].LastTransitionTime.Time
+		t2 := conditions[j].LastTransitionTime.Time
+
+		if t1.Equal(t2) {
+			if conditions[i].Status != conditions[j].Status {
+				if conditions[i].Status == corev1.ConditionTrue {
+					// logger.Info("swapping")
+					return reverse != true
+				}
+			}
+		}
+
+		return reverse != t1.Before(t2)
+	})
+}
