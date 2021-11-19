@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/porter-dev/porter-agent/pkg/models"
@@ -199,7 +198,6 @@ func (r *PodReconciler) populateOwnerDetails(ctx context.Context, req ctrl.Reque
 
 	eventDetails.OwnerName = owner.Name
 	eventDetails.OwnerType = owner.Kind
-
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -207,8 +205,4 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Pod{}).
 		Complete(r)
-}
-
-func getTime() string {
-	return time.Now().Format(time.RFC3339)
 }
