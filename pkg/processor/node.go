@@ -20,7 +20,7 @@ type NodeEventProcessor struct {
 func NewNodeEventProcessor() Interface {
 	return &NodeEventProcessor{
 		resourceType: models.NodeResource,
-		redisClient:  redis.NewClient(redisHost, redisPort, "", "", redis.NODESTORE, maxTailLines),
+		redisClient:  redis.NewClient(redisHost, redisPort, "", "", redis.PODSTORE, maxTailLines),
 		logger:       log.Log.WithName("node-event-processor"),
 	}
 }
