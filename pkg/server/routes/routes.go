@@ -11,5 +11,6 @@ func NewRouter() *gin.Engine {
 	router.GET("/pod/:podName/ns/:namespace/logbucket", handlers.ListLogBuckets)
 	router.GET("/pod/:podName/ns/:namespace/logbucket/:bucket", handlers.GetLogBucket)
 
+	router.GET("/nodes", handlers.ListNodes)
 	return router
 }
