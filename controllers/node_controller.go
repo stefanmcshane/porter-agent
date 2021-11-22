@@ -68,6 +68,8 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 
+	r.logger.Info("received node event", "event details", instance)
+
 	if instance.Status.Phase == corev1.NodePending ||
 		instance.Status.Phase == corev1.NodeTerminated {
 		// critical significance, trigger a notification
@@ -86,10 +88,15 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	if latestCondition.Status == corev1.ConditionFalse {
 		// critical
-		r.addToQueue(ctx, req, instance, true)
+		// r.addToQueue(ctx, req, instance, true)
 	} else {
 		// not critical
-		r.addToQueue(ctx, req, instance, false)
+		r.logger.Info("not a critical event")
+		r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{
+			NodeInstance: instance,
+		})
+
+		// r.addToQueue(ctx, req, instance, false)
 	}
 
 	return ctrl.Result{}, nil

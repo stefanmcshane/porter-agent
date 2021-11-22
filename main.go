@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/porter-dev/porter-agent/controllers"
 	"github.com/porter-dev/porter-agent/pkg/consumer"
 	"github.com/porter-dev/porter-agent/pkg/processor"
@@ -92,6 +93,15 @@ func main() {
 		Processor: processor.NewPodEventProcessor(mgr.GetConfig()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pod")
+		os.Exit(1)
+	}
+
+	if err = (&controllers.NodeReconciler{
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Processor: processor.NewNodeEventProcessor(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Node")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

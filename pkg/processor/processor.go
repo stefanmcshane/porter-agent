@@ -10,6 +10,7 @@ import (
 
 type EnqueueDetailOptions struct {
 	ContainerNamesToFetchLogs []string
+	NodeInstance              *corev1.Node
 }
 
 type Interface interface {

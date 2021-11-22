@@ -48,16 +48,19 @@ func (c *Client) limitNumberOfBuckets(ctx context.Context, pattern string, limit
 	}
 }
 
-func (c *Client) AppendAndTrimDetails(ctx context.Context, resourceType models.EventResourceType, namespace, name string, details []string) error {
+func (c *Client) AppendAndTrimDetails(ctx context.Context, resourceType models.EventResourceType, namespace, name string, details interface{}) error {
 	key := fmt.Sprintf("%s:%s:%s:%d", resourceType, namespace, name, time.Now().Unix())
 	_, err := c.client.LPush(ctx, key, details).Result()
 	if err != nil {
 		return err
 	}
 
-	_, err = c.client.LTrim(ctx, key, 0, c.maxEntries).Result()
-	if err != nil {
-		return err
+	if resourceType == models.PodResource {
+		// trim to last 100 log lines
+		_, err = c.client.LTrim(ctx, key, 0, c.maxEntries).Result()
+		if err != nil {
+			return err
+		}
 	}
 
 	// set max TTL to 1 week
