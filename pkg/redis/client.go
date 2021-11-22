@@ -194,6 +194,18 @@ func (c *Client) GetNodes(ctx context.Context) ([]string, error) {
 	return c.client.Keys(ctx, pattern).Result()
 }
 
+func (c *Client) GetNodeHistory(ctx context.Context, name string) ([]string, error) {
+	pattern := fmt.Sprintf("%s:%s:*", models.NodeResource, name)
+
+	return c.client.Keys(ctx, pattern).Result()
+}
+
+func (c *Client) GetNodeCondition(ctx context.Context, name, timestamp string) ([]string, error) {
+	key := fmt.Sprintf("%s:%s:%s", models.NodeResource, name, timestamp)
+
+	return c.client.LRange(ctx, key, 0, -1).Result()
+}
+
 // SearchBestMatchForBucket first tries an exact match to return
 // else resourts to matching the closest match for the given timestamp
 func (c *Client) SearchBestMatchForBucket(ctx context.Context, resourceType models.EventResourceType, namespace, name, timestamp string) ([]string, string, error) {
