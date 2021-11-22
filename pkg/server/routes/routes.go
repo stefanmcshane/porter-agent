@@ -12,5 +12,8 @@ func NewRouter() *gin.Engine {
 	router.GET("/pod/:podName/ns/:namespace/logbucket/:bucket", handlers.GetLogBucket)
 
 	router.GET("/nodes", handlers.ListNodes)
+	router.GET("/nodes/:node", handlers.ListNodeHistory)
+	router.GET("/nodes/:node/:timestamp", handlers.GetNodeCondition)
+
 	return router
 }
