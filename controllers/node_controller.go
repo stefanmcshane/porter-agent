@@ -88,7 +88,7 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	if latestCondition.Status == corev1.ConditionFalse {
 		// critical
-		// r.addToQueue(ctx, req, instance, true)
+		r.addToQueue(ctx, req, instance, true)
 	} else {
 		// not critical
 		r.logger.Info("not a critical event")
@@ -96,20 +96,20 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			NodeInstance: instance,
 		})
 
-		// r.addToQueue(ctx, req, instance, false)
+		r.addToQueue(ctx, req, instance, false)
 	}
 
 	return ctrl.Result{}, nil
 }
 
 func (r *NodeReconciler) addToQueue(ctx context.Context, req ctrl.Request, instance *corev1.Node, isCritical bool) {
-	// reason, message := r.getReasonAndMessage(instance)
+	latest := instance.Status.Conditions[0]
 	eventDetails := &models.EventDetails{
 		ResourceType: models.NodeResource,
 		Name:         req.Name,
 		Namespace:    req.Namespace,
-		Message:      "",
-		Reason:       "",
+		Message:      latest.Message,
+		Reason:       latest.Reason,
 		Critical:     isCritical,
 		Timestamp:    getTime(),
 	}

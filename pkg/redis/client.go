@@ -145,7 +145,12 @@ func (c *Client) RequeueItemWithScore(ctx context.Context, packed []byte, score 
 }
 
 func (c *Client) RegisterErroredItem(ctx context.Context, resourceType models.EventResourceType, namespace, name string) error {
-	key := fmt.Sprintf("errors:%s:%s:%s", resourceType, namespace, name)
+	var key string
+	if resourceType == models.PodResource {
+		key = fmt.Sprintf("errors:%s:%s:%s", resourceType, namespace, name)
+	} else {
+		key = fmt.Sprintf("errors:%s:%s", resourceType, name)
+	}
 
 	err := c.client.Set(ctx, key, true, 0).Err()
 	if err != nil {
@@ -156,7 +161,13 @@ func (c *Client) RegisterErroredItem(ctx context.Context, resourceType models.Ev
 }
 
 func (c *Client) ErroredItemExists(ctx context.Context, resourceType models.EventResourceType, namespace, name string) (bool, error) {
-	key := fmt.Sprintf("errors:%s:%s:%s", resourceType, namespace, name)
+	var key string
+
+	if resourceType == models.PodResource {
+		key = fmt.Sprintf("errors:%s:%s:%s", resourceType, namespace, name)
+	} else {
+		key = fmt.Sprintf("errors:%s:%s", resourceType, name)
+	}
 
 	val, err := c.client.Exists(ctx, key).Result()
 	if err != nil {
@@ -172,7 +183,13 @@ func (c *Client) ErroredItemExists(ctx context.Context, resourceType models.Even
 }
 
 func (c *Client) DeleteErroredItem(ctx context.Context, resourceType models.EventResourceType, namespace, name string) error {
-	key := fmt.Sprintf("errors:%s:%s:%s", resourceType, namespace, name)
+	var key string
+
+	if resourceType == models.PodResource {
+		key = fmt.Sprintf("errors:%s:%s:%s", resourceType, namespace, name)
+	} else {
+		key = fmt.Sprintf("errors:%s:%s", resourceType, name)
+	}
 
 	err := c.client.Del(ctx, key).Err()
 	if err != nil {
