@@ -98,6 +98,11 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	latestCondition := instance.Status.Conditions[0]
 
+	if len(instance.Status.ContainerStatuses) == 0 {
+		r.logger.Info("nothing in container statuses, reconciling")
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	if latestCondition.Status == corev1.ConditionFalse {
 		// latest condition status is false, hence trigger notification
 		r.addToQueue(ctx, req, instance, true)
