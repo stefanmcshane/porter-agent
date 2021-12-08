@@ -1,6 +1,10 @@
 package utils
 
-import "sigs.k8s.io/controller-runtime/pkg/client"
+import (
+	"regexp"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
 
 func NamespaceFilter(filter map[string]bool) func(client.Object) bool {
 	return func(object client.Object) bool {
@@ -12,4 +16,16 @@ func NamespaceFilter(filter map[string]bool) func(client.Object) bool {
 
 		return true
 	}
+}
+
+func ExtractErroredContainer(msg string) (string, bool) {
+	re := regexp.MustCompile(`\[([\w|-]+)\]`)
+
+	if !re.MatchString(msg) {
+		return "", false
+	}
+
+	match := re.FindStringSubmatch(msg)
+
+	return match[1], true
 }
