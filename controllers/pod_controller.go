@@ -104,6 +104,23 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	// if its a job, check the container statuses for status and exit code
+	_, ownerType := r.getOwnerDetails(ctx, req, instance)
+	if ownerType == "Job" {
+		err := r.checkJobPodForErrors(ctx, instance)
+		if err != nil {
+			r.addToQueue(ctx, req, instance, true)
+		} else {
+			r.addToQueue(ctx, req, instance, false)
+		}
+
+		r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{
+			ContainerNamesToFetchLogs: []string{"job"},
+		})
+
+		return ctrl.Result{}, nil
+	}
+
 	if latestCondition.Status == corev1.ConditionFalse {
 		// latest condition status is false, hence trigger notification
 		r.addToQueue(ctx, req, instance, true)
@@ -125,6 +142,18 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	return ctrl.Result{}, nil
 }
 
+func (r *PodReconciler) checkJobPodForErrors(ctx context.Context, instance *corev1.Pod) error {
+	for _, containerStatus := range instance.Status.ContainerStatuses {
+		if containerStatus.State.Terminated != nil {
+			if containerStatus.State.Terminated.ExitCode != 0 {
+				return fmt.Errorf("container %s returned with non zero exit code", containerStatus.Name)
+			}
+		}
+	}
+
+	return nil
+}
+
 func (r *PodReconciler) addToQueue(ctx context.Context, req ctrl.Request, instance *corev1.Pod, isCritical bool) {
 	eventDetails := &models.EventDetails{
 		ResourceType: models.PodResource,
@@ -136,7 +165,7 @@ func (r *PodReconciler) addToQueue(ctx context.Context, req ctrl.Request, instan
 		Status:       fmt.Sprintf("Type: %s, Status: %s", instance.Status.Conditions[0].Type, instance.Status.Conditions[0].Status),
 	}
 
-	r.populateOwnerDetails(ctx, req, instance, eventDetails)
+	eventDetails.OwnerName, eventDetails.OwnerType = r.getOwnerDetails(ctx, req, instance)
 	eventDetails.Reason, eventDetails.Message = r.getReasonAndMessage(instance, eventDetails.OwnerType)
 
 	r.logger.Info("populated owner details", "details", eventDetails)
@@ -234,12 +263,12 @@ func (r *PodReconciler) fetchReplicaSetOwner(ctx context.Context, req ctrl.Reque
 	return &owner, nil
 }
 
-func (r *PodReconciler) populateOwnerDetails(ctx context.Context, req ctrl.Request, pod *corev1.Pod, eventDetails *models.EventDetails) {
+func (r *PodReconciler) getOwnerDetails(ctx context.Context, req ctrl.Request, pod *corev1.Pod) (string, string) {
 	owners := pod.ObjectMeta.OwnerReferences
 
 	if len(owners) == 0 {
 		r.logger.Info("no owners defined for the pod")
-		return
+		return "", ""
 	}
 
 	// in case of multiple owners, take the first
@@ -260,12 +289,11 @@ func (r *PodReconciler) populateOwnerDetails(ctx context.Context, req ctrl.Reque
 		if err != nil {
 			r.logger.Error(err, "cannot fetch owner for replicaset")
 
-			return
+			return "", ""
 		}
 	}
 
-	eventDetails.OwnerName = owner.Name
-	eventDetails.OwnerType = owner.Kind
+	return owner.Name, owner.Kind
 
 }
 
