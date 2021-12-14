@@ -15,6 +15,8 @@ const (
 	EventNormal   EventCriticality = "Normal"
 
 	UnhealthyToHealthyTransitionMessage string = "Pod transitioned from unhealthy to healthy state"
+
+	UndeterminedState string = "Unable to determine the root cause of the error"
 )
 
 type EventCriticality string

@@ -115,8 +115,8 @@ func (e *EventConsumer) Start() {
 
 		// in case of un-healthy to healthy pod transition, check and populate the message field
 		if payload.Message == "" {
-			payload.Message = models.UnhealthyToHealthyTransitionMessage
-			e.consumerLog.Info("empty message, setting to UnhealthyToHealthyTransitionMessage")
+			payload.Message = models.UndeterminedState
+			e.consumerLog.Info("empty message, setting to UndeterminedState")
 		}
 
 		e.consumerLog.Info("doing HTTP post", "detail", payload)
