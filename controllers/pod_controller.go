@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -103,6 +104,23 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	// if its a job, check the container statuses for status and exit code
+	_, ownerType := r.getOwnerDetails(ctx, req, instance)
+	if ownerType == "Job" {
+		err := r.checkJobPodForErrors(ctx, instance)
+		if err != nil {
+			r.addToQueue(ctx, req, instance, true)
+		} else {
+			r.addToQueue(ctx, req, instance, false)
+		}
+
+		r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{
+			ContainerNamesToFetchLogs: []string{"job"},
+		})
+
+		return ctrl.Result{}, nil
+	}
+
 	if latestCondition.Status == corev1.ConditionFalse {
 		// latest condition status is false, hence trigger notification
 		r.addToQueue(ctx, req, instance, true)
@@ -124,27 +142,38 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	return ctrl.Result{}, nil
 }
 
+func (r *PodReconciler) checkJobPodForErrors(ctx context.Context, instance *corev1.Pod) error {
+	for _, containerStatus := range instance.Status.ContainerStatuses {
+		if containerStatus.State.Terminated != nil {
+			if containerStatus.State.Terminated.ExitCode != 0 {
+				return fmt.Errorf("container %s returned with non zero exit code", containerStatus.Name)
+			}
+		}
+	}
+
+	return nil
+}
+
 func (r *PodReconciler) addToQueue(ctx context.Context, req ctrl.Request, instance *corev1.Pod, isCritical bool) {
-	reason, message := r.getReasonAndMessage(instance)
 	eventDetails := &models.EventDetails{
 		ResourceType: models.PodResource,
 		Name:         req.Name,
 		Namespace:    req.Namespace,
-		Message:      message,
-		Reason:       reason,
 		Critical:     isCritical,
 		Timestamp:    getTime(),
 		Phase:        string(instance.Status.Phase),
 		Status:       fmt.Sprintf("Type: %s, Status: %s", instance.Status.Conditions[0].Type, instance.Status.Conditions[0].Status),
 	}
 
-	r.populateOwnerDetails(ctx, req, instance, eventDetails)
+	eventDetails.OwnerName, eventDetails.OwnerType = r.getOwnerDetails(ctx, req, instance)
+	eventDetails.Reason, eventDetails.Message = r.getReasonAndMessage(instance, eventDetails.OwnerType)
+
 	r.logger.Info("populated owner details", "details", eventDetails)
 
 	r.Processor.AddToWorkQueue(ctx, req.NamespacedName, eventDetails)
 }
 
-func (r *PodReconciler) getReasonAndMessage(instance *corev1.Pod) (string, string) {
+func (r *PodReconciler) getReasonAndMessage(instance *corev1.Pod, ownerType string) (string, string) {
 	// since list is already sorted in place now, hence the first condition
 	// is the latest, get its reason and message
 
@@ -152,10 +181,14 @@ func (r *PodReconciler) getReasonAndMessage(instance *corev1.Pod) (string, strin
 		latest := instance.Status.Conditions[0]
 		r.logger.Info("multicontainer scenario", "latest", latest)
 
-		reason, message := latest.Reason, latest.Message
+		// if pod is owned by a job, check in all containers
+		if ownerType == "Job" {
+			r.logger.Info("pod owned by a job. extracting from all container statuses of the pod")
+			return r.extractMultipleContainerStatuses(instance)
+		}
 
 		// check if a failing container is mentioned in the message
-		container, ok := utils.ExtractErroredContainer(message)
+		container, ok := utils.ExtractErroredContainer(latest.Message)
 		r.logger.Info("extracted errored containers", "container", container, "ok", ok)
 		if ok {
 			r.logger.Info("failing container in message")
@@ -163,12 +196,26 @@ func (r *PodReconciler) getReasonAndMessage(instance *corev1.Pod) (string, strin
 			return r.extractFromContainerStatuses(container, instance)
 		}
 
-		return reason, message
+		return r.extractMultipleContainerStatuses(instance)
 	}
 
 	r.logger.Info("extracting details from container statuses")
 	// since its a single container call with empty container name
 	return r.extractFromContainerStatuses("", instance)
+}
+
+func (r *PodReconciler) extractMultipleContainerStatuses(instance *corev1.Pod) (string, string) {
+	reasons := []string{}
+	messages := []string{}
+
+	for _, container := range instance.Status.ContainerStatuses {
+		reason, message := r.extractFromContainerStatuses(container.Name, instance)
+
+		reasons = append(reasons, fmt.Sprintf("Container: %s, Reason: %s", container.Name, reason))
+		messages = append(messages, fmt.Sprintf("Container: %s, Reason: %s", container.Name, message))
+	}
+
+	return strings.Join(reasons, "\n"), strings.Join(messages, "\n")
 }
 
 func (r *PodReconciler) extractFromContainerStatuses(containerName string, instance *corev1.Pod) (string, string) {
@@ -190,10 +237,10 @@ func (r *PodReconciler) extractFromContainerStatuses(containerName string, insta
 	}
 
 	if state.Terminated != nil {
-		return state.Terminated.Reason, state.Terminated.Message
+		return fmt.Sprintf("State: %s, reason: %s", "Terminated", state.Terminated.Reason), state.Terminated.Message
 	}
 
-	return state.Waiting.Reason, state.Waiting.Message
+	return fmt.Sprintf("State: %s, reason: %s", "Waiting", state.Waiting.Reason), state.Waiting.Message
 }
 
 func (r *PodReconciler) fetchReplicaSetOwner(ctx context.Context, req ctrl.Request) (*metav1.OwnerReference, error) {
@@ -216,12 +263,12 @@ func (r *PodReconciler) fetchReplicaSetOwner(ctx context.Context, req ctrl.Reque
 	return &owner, nil
 }
 
-func (r *PodReconciler) populateOwnerDetails(ctx context.Context, req ctrl.Request, pod *corev1.Pod, eventDetails *models.EventDetails) {
+func (r *PodReconciler) getOwnerDetails(ctx context.Context, req ctrl.Request, pod *corev1.Pod) (string, string) {
 	owners := pod.ObjectMeta.OwnerReferences
 
 	if len(owners) == 0 {
 		r.logger.Info("no owners defined for the pod")
-		return
+		return "", ""
 	}
 
 	// in case of multiple owners, take the first
@@ -242,12 +289,11 @@ func (r *PodReconciler) populateOwnerDetails(ctx context.Context, req ctrl.Reque
 		if err != nil {
 			r.logger.Error(err, "cannot fetch owner for replicaset")
 
-			return
+			return "", ""
 		}
 	}
 
-	eventDetails.OwnerName = owner.Name
-	eventDetails.OwnerType = owner.Kind
+	return owner.Name, owner.Kind
 
 }
 
