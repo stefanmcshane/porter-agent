@@ -76,15 +76,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	// else we still have the object
-	// we can log the current condition
-	if instance.Status.Phase == corev1.PodFailed ||
-		instance.Status.Phase == corev1.PodUnknown {
-		// critical condition, must trigger a notification
-		r.addToQueue(ctx, req, instance, true)
-		return ctrl.Result{}, nil
-	}
-
 	// check latest condition by sorting
 	// r.logger.Info("pod conditions before sorting", "conditions", instance.Status.Conditions)
 	utils.PodConditionsSorter(instance.Status.Conditions, true)
@@ -102,6 +93,15 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	if len(instance.Status.ContainerStatuses) == 0 {
 		r.logger.Info("nothing in container statuses, reconciling")
 		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// else we still have the object
+	// we can log the current condition
+	if instance.Status.Phase == corev1.PodFailed ||
+		instance.Status.Phase == corev1.PodUnknown {
+		// critical condition, must trigger a notification
+		r.addToQueue(ctx, req, instance, true)
+		return ctrl.Result{}, nil
 	}
 
 	// if its a job, check the container statuses for status and exit code
