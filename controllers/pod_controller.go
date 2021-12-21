@@ -211,8 +211,13 @@ func (r *PodReconciler) extractMultipleContainerStatuses(instance *corev1.Pod) (
 	for _, container := range instance.Status.ContainerStatuses {
 		reason, message := r.extractFromContainerStatuses(container.Name, instance)
 
-		reasons = append(reasons, fmt.Sprintf("Container: %s, Reason: %s", container.Name, reason))
-		messages = append(messages, fmt.Sprintf("Container: %s, Reason: %s", container.Name, message))
+		if reason != "" {
+			reasons = append(reasons, fmt.Sprintf("Container: %s in %s", container.Name, reason))
+		}
+
+		if message != "" {
+			messages = append(messages, fmt.Sprintf("Container: %s %s", container.Name, message))
+		}
 	}
 
 	return strings.Join(reasons, "\n"), strings.Join(messages, "\n")
@@ -237,10 +242,13 @@ func (r *PodReconciler) extractFromContainerStatuses(containerName string, insta
 	}
 
 	if state.Terminated != nil {
-		return fmt.Sprintf("State: %s, reason: %s", "Terminated", state.Terminated.Reason), state.Terminated.Message
+		if state.Terminated.ExitCode != 0 {
+			return fmt.Sprintf("%s state for the reason: %s", "Terminated", state.Terminated.Reason), state.Terminated.Message
+		}
+		return "", ""
 	}
 
-	return fmt.Sprintf("State: %s, reason: %s", "Waiting", state.Waiting.Reason), state.Waiting.Message
+	return fmt.Sprintf("%s state for the reason: %s", "Waiting", state.Waiting.Reason), state.Waiting.Message
 }
 
 func (r *PodReconciler) fetchReplicaSetOwner(ctx context.Context, req ctrl.Request) (*metav1.OwnerReference, error) {
