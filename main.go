@@ -25,6 +25,7 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 
+	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,7 +39,9 @@ import (
 	"github.com/porter-dev/porter-agent/controllers"
 	"github.com/porter-dev/porter-agent/pkg/consumer"
 	"github.com/porter-dev/porter-agent/pkg/processor"
+	"github.com/porter-dev/porter-agent/pkg/redis"
 	"github.com/porter-dev/porter-agent/pkg/server/routes"
+	"github.com/spf13/viper"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -48,9 +51,22 @@ var (
 	eventConsumer *consumer.EventConsumer
 
 	httpServer *gin.Engine
+
+	redisHost    string
+	redisPort    string
+	maxTailLines int64
 )
 
 func init() {
+	viper.SetDefault("REDIS_HOST", "porter-redis-master")
+	viper.SetDefault("REDIS_PORT", "6379")
+	viper.SetDefault("MAX_TAIL_LINES", int64(100))
+	viper.AutomaticEnv()
+
+	redisHost = viper.GetString("REDIS_HOST")
+	redisPort = viper.GetString("REDIS_PORT")
+	maxTailLines = viper.GetInt64("MAX_TAIL_LINES")
+
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	//+kubebuilder:scaffold:scheme
@@ -86,10 +102,27 @@ func main() {
 		os.Exit(1)
 	}
 
+	redisClient := redis.NewClient(redisHost, redisPort, "", "", redis.PODSTORE, maxTailLines)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if firstRun, err := redisClient.IsFirstRun(ctx); err != nil {
+		setupLog.Error(err, "error checking for first run of agent")
+		os.Exit(1)
+	} else if firstRun {
+		err = redisClient.SetAgentCreationTimestamp(ctx)
+		if err != nil {
+			setupLog.Error(err, "error setting agent creation timestamp")
+			os.Exit(1)
+		}
+	}
+
 	if err = (&controllers.PodReconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		Processor: processor.NewPodEventProcessor(mgr.GetConfig()),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		RedisClient: redisClient,
+		KubeClient:  kubernetes.NewForConfigOrDie(mgr.GetConfig()),
+		Processor:   processor.NewPodEventProcessor(mgr.GetConfig()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pod")
 		os.Exit(1)

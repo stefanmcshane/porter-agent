@@ -17,31 +17,49 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/porter-dev/porter-agent/pkg/models"
 	"github.com/porter-dev/porter-agent/pkg/processor"
+	"github.com/porter-dev/porter-agent/pkg/redis"
 	"github.com/porter-dev/porter-agent/pkg/utils"
+	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var maxTailLines int64
+
+func init() {
+	viper.SetDefault("MAX_TAIL_LINES", int64(100))
+	viper.AutomaticEnv()
+
+	maxTailLines = viper.GetInt64("MAX_TAIL_LINES")
+}
 
 // PodReconciler reconciles a Pod object
 type PodReconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
 	Processor processor.Interface
+
+	RedisClient *redis.Client
+	KubeClient  *kubernetes.Clientset
 
 	logger logr.Logger
 }
@@ -97,9 +115,144 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	// else we still have the object
 	// we can log the current condition
-	if instance.Status.Phase == corev1.PodFailed ||
+
+	ownerName, ownerKind := r.getOwnerDetails(ctx, req, instance)
+	incident := utils.NewIncident(ownerName, instance.Namespace)
+	incidentID := incident.ToString()
+
+	if instance.Status.Phase == corev1.PodRunning {
+		// check if a container has transitioned from an unhealthy phase to a healthy phase
+
+	} else if instance.Status.Phase == corev1.PodFailed ||
 		instance.Status.Phase == corev1.PodUnknown {
-		// critical condition, must trigger a notification
+		// critical condition, trigger a notification
+
+		containerEvents := make(map[string]*models.ContainerEvent)
+
+		for _, status := range instance.Status.ContainerStatuses {
+			if status.State.Terminated != nil && status.LastTerminationState.Terminated != nil {
+				event := &models.ContainerEvent{
+					Name:     status.Name,
+					ExitCode: status.LastTerminationState.Terminated.ExitCode,
+				}
+
+				switch event.ExitCode {
+				case 137:
+					event.Reason = "SIGKILL"
+				default:
+					event.Reason = status.LastTerminationState.Terminated.Reason
+				}
+				event.Message = status.LastTerminationState.Terminated.Message
+
+				containerEvents[status.Name] = event
+			}
+		}
+
+		if ownerKind == "Job" {
+		} else if ownerKind == "Deployment" {
+			if strings.Contains(instance.Status.Reason, "OOM") {
+				// an out of memory error
+			}
+
+			event := &models.PodEvent{
+				PodName:         instance.Name,
+				Namespace:       instance.Namespace,
+				OwnerName:       ownerName,
+				OwnerType:       ownerKind,
+				Timestamp:       time.Now().Unix(),
+				Phase:           string(instance.Status.Phase),
+				ContainerEvents: containerEvents,
+			}
+
+			event.Status = fmt.Sprintf("Type: %s, Status: %s", instance.Status.Conditions[0].Type,
+				instance.Status.Conditions[0].Status)
+			event.Reason, event.Message = r.getReasonAndMessage(instance, event.OwnerType)
+
+			if exists, err := r.RedisClient.IncidentExists(ctx, incidentID); err != nil {
+				return ctrl.Result{Requeue: true}, err
+			} else if exists {
+				// do not add duplicate events when possible
+				latestEvent, err := r.RedisClient.GetLatestEventForIncident(ctx, incidentID)
+				if err != nil {
+					return ctrl.Result{Requeue: true}, err
+				}
+
+				if latestEvent.Reason == event.Reason && latestEvent.Message == event.Reason {
+					// since both the reason and the message are the same as the latest event for this incident,
+					// we now check if this new event is an exact copy of the latest event
+					newEvent := false
+
+					if len(event.ContainerEvents) == len(latestEvent.ContainerEvents) {
+						for containerName, containerEvent := range latestEvent.ContainerEvents {
+							if _, ok := event.ContainerEvents[containerName]; !ok {
+								// new container name so must be a new event
+								newEvent = true
+								break
+							}
+
+							newContainerEvent := event.ContainerEvents[containerName]
+
+							if newContainerEvent.ExitCode != containerEvent.ExitCode ||
+								newContainerEvent.Reason != containerEvent.Reason ||
+								newContainerEvent.Message != containerEvent.Message {
+								newEvent = true
+								break
+							}
+						}
+					} else {
+						newEvent = true
+					}
+
+					if !newEvent {
+						return ctrl.Result{}, nil
+					}
+				}
+			}
+
+			for containerName, containerEvent := range event.ContainerEvents {
+				logOptions := &corev1.PodLogOptions{
+					TailLines: &maxTailLines,
+					Container: containerName,
+				}
+
+				req := r.KubeClient.
+					CoreV1().
+					Pods(instance.Name).
+					GetLogs(instance.Name, logOptions)
+
+				podLogs, err := req.Stream(ctx)
+				if err != nil {
+					r.logger.Error(err, "error streaming logs")
+					return ctrl.Result{Requeue: true}, err
+				}
+				defer podLogs.Close()
+
+				logs := new(bytes.Buffer)
+				_, err = io.Copy(logs, podLogs)
+				if err != nil {
+					r.logger.Error(err, "unable to read logs")
+					return ctrl.Result{Requeue: true}, err
+				}
+
+				strLogs := logs.String()
+
+				logID, err := r.RedisClient.AddLogs(ctx, strLogs)
+				if err != nil {
+					r.logger.Error(err, "error adding new logs")
+					return ctrl.Result{Requeue: true}, err
+				}
+
+				containerEvent.LogID = logID
+			}
+
+			err = r.RedisClient.AddEventToIncident(ctx, incidentID, event)
+			if err != nil && strings.Contains(err.Error(), "max event count") {
+				return ctrl.Result{}, nil
+			} else if err != nil {
+				return ctrl.Result{Requeue: true}, err
+			}
+		}
+
 		r.addToQueue(ctx, req, instance, true)
 		return ctrl.Result{}, nil
 	}
@@ -294,16 +447,50 @@ func (r *PodReconciler) getOwnerDetails(ctx context.Context, req ctrl.Request, p
 	}
 
 	return owner.Name, owner.Kind
-
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Pod{}).
+		WithEventFilter(&PodPredicate{
+			RedisClient: r.RedisClient,
+		}).
 		Complete(r)
 }
 
 func getTime() string {
 	return time.Now().Format(time.RFC3339)
+}
+
+type PodPredicate struct {
+	RedisClient *redis.Client
+}
+
+func (pred *PodPredicate) Create(_ event.CreateEvent) bool {
+	return true
+}
+
+func (pred *PodPredicate) Update(_ event.UpdateEvent) bool {
+	return true
+}
+
+func (pred *PodPredicate) Delete(_ event.DeleteEvent) bool {
+	return true
+}
+
+func (pred *PodPredicate) Generic(ev event.GenericEvent) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	agentCreationTimestamp, err := pred.RedisClient.GetAgentCreationTimestamp(ctx)
+	if err != nil {
+		return false
+	}
+
+	if ev.Object.GetCreationTimestamp().Unix() >= agentCreationTimestamp {
+		return true
+	}
+
+	return false
 }

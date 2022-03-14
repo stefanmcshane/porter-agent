@@ -8,8 +8,10 @@ import (
 func NewRouter() *gin.Engine {
 	router := gin.Default()
 
-	router.GET("/pod/:podName/ns/:namespace/logbucket", handlers.ListLogBuckets)
-	router.GET("/pod/:podName/ns/:namespace/logbucket/:bucket", handlers.GetLogBucket)
+	router.GET("/incidents", handlers.GetAllIncidents)
+	router.GET("/incidents/:incidentID", handlers.GetIncidentEventsByID)
+	router.GET("/incidents/release/:releaseName", handlers.GetIncidentsByReleaseName)
+	router.GET("/incidents/logs/:logID", handlers.GetLogs)
 
 	return router
 }
