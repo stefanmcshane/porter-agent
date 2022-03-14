@@ -33,10 +33,38 @@ func GetAllIncidents(c *gin.Context) {
 			return
 		}
 
-		incidents = append(incidents, &models.Incident{
+		incident := &models.Incident{
 			ID:          id,
 			ReleaseName: incidentObj.GetReleaseName(),
-		})
+		}
+
+		resolved, err := redisClient.IsIncidentResolved(c.Copy(), id)
+		if err != nil {
+			httpLogger.Error(err, "error checking if incident with ID: %s resolved:", id)
+
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "internal server error",
+			})
+			return
+		}
+
+		if resolved {
+			incident.LatestState = "RESOLVED"
+		} else {
+			incident.LatestState = "ONGOING"
+		}
+
+		incident.LatestReason, incident.LatestMessage, err = redisClient.GetLatestReasonAndMessage(c.Copy(), id)
+		if err != nil {
+			httpLogger.Error(err, "error fetching latest reason and messaged for incident ID:", id)
+
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "internal server error",
+			})
+			return
+		}
+
+		incidents = append(incidents, incident)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
