@@ -10,7 +10,7 @@ func NewRouter() *gin.Engine {
 
 	router.GET("/incidents", handlers.GetAllIncidents)
 	router.GET("/incidents/:incidentID", handlers.GetIncidentEventsByID)
-	router.GET("/incidents/release/:releaseName", handlers.GetIncidentsByReleaseName)
+	router.GET("/incidents/namespaces/:namespace/releases/:releaseName", handlers.GetIncidentsByReleaseNamespace)
 	router.GET("/incidents/logs/:logID", handlers.GetLogs)
 
 	return router

@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	porterErrors "github.com/porter-dev/porter-agent/pkg/errors"
 	"github.com/porter-dev/porter-agent/pkg/models"
+	"github.com/porter-dev/porter-agent/pkg/utils"
 )
 
 const (
@@ -374,9 +375,11 @@ func (c *Client) AddEventToIncident(ctx context.Context, incidentID string, even
 		return fmt.Errorf("error adding new pod event to incident with ID: %s. Error: %w", incidentID, err)
 	}
 
+	incidentObj, _ := utils.NewIncidentFromString(incidentID)
+
 	if newIncident {
 		// set a TTL for 2 weeks
-		_, err = c.client.ExpireAt(ctx, incidentID, time.Now().Add(time.Hour*24*14)).Result()
+		_, err = c.client.ExpireAt(ctx, incidentID, incidentObj.GetTimestampAsTime().Add(time.Hour*24*14)).Result()
 		if err != nil {
 			return fmt.Errorf("error setting expiration to incident with ID: %s. Error: %w", incidentID, err)
 		}
@@ -392,7 +395,8 @@ func (c *Client) AddEventToIncident(ctx context.Context, incidentID string, even
 	}
 
 	if newIncident {
-		_, err = c.client.ExpireAt(ctx, fmt.Sprintf("pods:%s", incidentID), time.Now().Add(time.Hour*24*14)).Result()
+		_, err = c.client.ExpireAt(ctx, fmt.Sprintf("pods:%s", incidentID),
+			incidentObj.GetTimestampAsTime().Add(time.Hour*24*14)).Result()
 		if err != nil {
 			return fmt.Errorf("error setting expiration for pod set for incident ID: %s. Error: %w", incidentID, err)
 		}
@@ -408,9 +412,25 @@ func (c *Client) SetPodResolved(ctx context.Context, podName, incidentID string)
 		return fmt.Errorf("trying to set pod resolved for non-existent incident with ID: %s", incidentID)
 	}
 
-	_, err := c.client.SRem(ctx, fmt.Sprintf("pods:%s", incidentID), podName).Result()
+	key := fmt.Sprintf("pods:%s", incidentID)
+
+	_, err := c.client.SRem(ctx, key, podName).Result()
 	if err != nil {
 		return fmt.Errorf("error trying to set pod resolved for pod: %s for incident ID: %s", podName, incidentID)
+	}
+
+	if affectedPods, err := c.client.SMembers(ctx, key).Result(); err != nil {
+		return fmt.Errorf("error trying to get members of set: %s. Error: %w", key, err)
+	} else if len(affectedPods) == 0 {
+		// all pods are now healthy, delete the active incident
+
+		incidentObj, _ := utils.NewIncidentFromString(incidentID)
+
+		_, err := c.client.Del(ctx, fmt.Sprintf("active_incident:%s:%s", incidentObj.GetReleaseName(),
+			incidentObj.GetNamespace())).Result()
+		if err != nil {
+			return fmt.Errorf("error trying to remove %s from active_incident. Error: %w", incidentID, err)
+		}
 	}
 
 	return nil
@@ -430,7 +450,7 @@ func (c *Client) IsIncidentResolved(ctx context.Context, incidentID string) (boo
 }
 
 func (c *Client) GetAllIncidents(ctx context.Context) ([]string, error) {
-	incidents, err := c.client.Keys(ctx, "incident:*:*").Result()
+	incidents, err := c.client.Keys(ctx, "incident:*:*:*").Result()
 	if err != nil {
 		return nil, err
 	}
@@ -438,8 +458,8 @@ func (c *Client) GetAllIncidents(ctx context.Context) ([]string, error) {
 	return incidents, nil
 }
 
-func (c *Client) GetIncidentsByReleaseName(ctx context.Context, releaseName string) ([]string, error) {
-	incidents, err := c.client.Keys(ctx, fmt.Sprintf("incident:%s:*", releaseName)).Result()
+func (c *Client) GetIncidentsByReleaseNamespace(ctx context.Context, releaseName, namespace string) ([]string, error) {
+	incidents, err := c.client.Keys(ctx, fmt.Sprintf("incident:%s:%s:*", releaseName, namespace)).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -521,4 +541,35 @@ func (c *Client) GetLatestReasonAndMessage(ctx context.Context, incidentID strin
 	}
 
 	return event.Reason, event.Message, nil
+}
+
+func (c *Client) GetOrCreateActiveIncident(ctx context.Context, releaseName, namespace string) (string, error) {
+	key := fmt.Sprintf("active_incident:%s:%s", releaseName, namespace)
+
+	exists, err := c.client.Exists(ctx, key).Result()
+	if err != nil {
+		return "", fmt.Errorf("error checking for active incident for %s in namespace %s. Error: %w",
+			releaseName, namespace, err)
+	}
+
+	if exists == 0 {
+		// create a new active incident key
+		newIncident := utils.NewIncident(releaseName, namespace, time.Now().Unix())
+
+		_, err := c.client.Set(ctx, key, newIncident, time.Hour*24*14).Result()
+		if err != nil {
+			return "", fmt.Errorf("error creating new active incident for release %s with namespace %s. Error: %w",
+				releaseName, namespace, err)
+		}
+	} else if exists == 1 {
+		incidentID, err := c.client.Get(ctx, key).Result()
+		if err != nil {
+			return "", fmt.Errorf("error fetching active incident for %s in namespace %s. Error: %w",
+				releaseName, namespace, err)
+		}
+
+		return incidentID, nil
+	}
+
+	return "", fmt.Errorf("error fetching active incident for %s in namespace %s", releaseName, namespace)
 }

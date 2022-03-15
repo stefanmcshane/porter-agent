@@ -72,10 +72,11 @@ func GetAllIncidents(c *gin.Context) {
 	})
 }
 
-func GetIncidentsByReleaseName(c *gin.Context) {
+func GetIncidentsByReleaseNamespace(c *gin.Context) {
 	releaseName := c.Param("releaseName")
+	namespace := c.Param("namespace")
 
-	incidentIDs, err := redisClient.GetIncidentsByReleaseName(c.Copy(), releaseName)
+	incidentIDs, err := redisClient.GetIncidentsByReleaseNamespace(c.Copy(), releaseName, namespace)
 	if err != nil {
 		httpLogger.Error(err, "error getting incidents for release:", releaseName)
 
