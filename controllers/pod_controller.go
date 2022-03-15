@@ -39,7 +39,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -107,6 +106,22 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 
 		return ctrl.Result{}, err
+	}
+
+	if instance.Namespace == "cert-manager" || instance.Namespace == "ingress-nginx" ||
+		instance.Namespace == "kube-node-lease" || instance.Namespace == "kube-public" ||
+		instance.Namespace == "kube-system" || instance.Namespace == "monitoring" ||
+		instance.Namespace == "porter-agent-system" {
+		return ctrl.Result{}, nil
+	}
+
+	agentCreationTimestamp, err := r.RedisClient.GetAgentCreationTimestamp(ctx)
+	if err != nil {
+		return ctrl.Result{Requeue: true}, err
+	}
+
+	if instance.GetCreationTimestamp().Unix() >= agentCreationTimestamp {
+		return ctrl.Result{}, nil
 	}
 
 	// check latest condition by sorting
@@ -481,44 +496,9 @@ func (r *PodReconciler) getOwnerDetails(ctx context.Context, req ctrl.Request, p
 func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Pod{}).
-		WithEventFilter(&PodPredicate{
-			RedisClient: r.RedisClient,
-		}).
 		Complete(r)
 }
 
 func getTime() string {
 	return time.Now().Format(time.RFC3339)
-}
-
-type PodPredicate struct {
-	RedisClient *redis.Client
-}
-
-func (pred *PodPredicate) Create(_ event.CreateEvent) bool {
-	return true
-}
-
-func (pred *PodPredicate) Update(_ event.UpdateEvent) bool {
-	return true
-}
-
-func (pred *PodPredicate) Delete(_ event.DeleteEvent) bool {
-	return true
-}
-
-func (pred *PodPredicate) Generic(ev event.GenericEvent) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
-
-	agentCreationTimestamp, err := pred.RedisClient.GetAgentCreationTimestamp(ctx)
-	if err != nil {
-		return false
-	}
-
-	if ev.Object.GetCreationTimestamp().Unix() >= agentCreationTimestamp {
-		return true
-	}
-
-	return false
 }

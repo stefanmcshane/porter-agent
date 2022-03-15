@@ -556,7 +556,7 @@ func (c *Client) GetOrCreateActiveIncident(ctx context.Context, releaseName, nam
 		// create a new active incident key
 		newIncident := utils.NewIncident(releaseName, namespace, time.Now().Unix())
 
-		_, err := c.client.Set(ctx, key, newIncident, time.Hour*24*14).Result()
+		_, err := c.client.Set(ctx, key, newIncident.ToString(), time.Hour*24*14).Result()
 		if err != nil {
 			return "", fmt.Errorf("error creating new active incident for release %s with namespace %s. Error: %w",
 				releaseName, namespace, err)
