@@ -43,14 +43,20 @@ import (
 )
 
 var (
+	redisHost        string
+	redisPort        string
 	maxTailLines     int64
 	containerSignals map[int32]string
 )
 
 func init() {
+	viper.SetDefault("REDIS_HOST", "porter-redis-master")
+	viper.SetDefault("REDIS_PORT", "6379")
 	viper.SetDefault("MAX_TAIL_LINES", int64(100))
 	viper.AutomaticEnv()
 
+	redisHost = viper.GetString("REDIS_HOST")
+	redisPort = viper.GetString("REDIS_PORT")
 	maxTailLines = viper.GetInt64("MAX_TAIL_LINES")
 
 	// refer: https://www.man7.org/linux/man-pages/man7/signal.7.html
@@ -72,7 +78,7 @@ type PodReconciler struct {
 	Scheme    *runtime.Scheme
 	Processor processor.Interface
 
-	RedisClient *redis.Client
+	redisClient *redis.Client
 	KubeClient  *kubernetes.Clientset
 
 	logger logr.Logger
@@ -93,6 +99,10 @@ type PodReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.logger = log.FromContext(ctx)
+
+	if r.redisClient == nil {
+		r.redisClient = redis.NewClient(redisHost, redisPort, "", "", redis.PODSTORE, maxTailLines)
+	}
 
 	instance := &corev1.Pod{}
 	err := r.Get(ctx, req.NamespacedName, instance)
@@ -115,12 +125,13 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	agentCreationTimestamp, err := r.RedisClient.GetAgentCreationTimestamp(ctx)
+	agentCreationTimestamp, err := r.redisClient.GetAgentCreationTimestamp(ctx)
 	if err != nil {
+		r.logger.Error(err, "redisClient.GetAgentCreationTimestamp ERROR")
 		return ctrl.Result{Requeue: true}, err
 	}
 
-	if instance.GetCreationTimestamp().Unix() >= agentCreationTimestamp {
+	if instance.GetCreationTimestamp().Unix() < agentCreationTimestamp {
 		return ctrl.Result{}, nil
 	}
 
@@ -136,7 +147,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	latestCondition := instance.Status.Conditions[0]
+	// latestCondition := instance.Status.Conditions[0]
 
 	if len(instance.Status.ContainerStatuses) == 0 {
 		r.logger.Info("nothing in container statuses, reconciling")
@@ -147,80 +158,86 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	// we can log the current condition
 
 	ownerName, ownerKind := r.getOwnerDetails(ctx, req, instance)
-	incidentID, err := r.RedisClient.GetOrCreateActiveIncident(ctx, ownerName, instance.Namespace)
+	incidentID, err := r.redisClient.GetOrCreateActiveIncident(ctx, ownerName, instance.Namespace)
 	if err != nil {
 		return ctrl.Result{Requeue: true}, err
 	}
 
-	if instance.Status.Phase == corev1.PodRunning {
-		// check if a container has transitioned from an unhealthy phase to a healthy phase
+	r.logger.Info("active incident ID", "incidentID", incidentID)
 
-		if ownerKind == "Deployment" {
-			err = r.RedisClient.SetPodResolved(ctx, instance.Name, incidentID)
-			if err != nil {
-				return ctrl.Result{}, nil // FIXME: better introspection to requeue here
+	// if instance.Status.Phase == corev1.PodFailed ||
+	// instance.Status.Phase == corev1.PodUnknown {
+	// critical condition, trigger a notification
+
+	r.logger.Info("creating container events")
+	containerEvents := make(map[string]*models.ContainerEvent)
+
+	for _, status := range instance.Status.ContainerStatuses {
+		r.logger.Info("container status", "status", status)
+		if status.LastTerminationState.Terminated != nil {
+			event := &models.ContainerEvent{
+				Name:     status.Name,
+				ExitCode: status.LastTerminationState.Terminated.ExitCode,
 			}
-		}
-	} else if instance.Status.Phase == corev1.PodFailed ||
-		instance.Status.Phase == corev1.PodUnknown {
-		// critical condition, trigger a notification
 
-		containerEvents := make(map[string]*models.ContainerEvent)
+			if event.Reason == "" {
+				if signal, ok := containerSignals[event.ExitCode]; ok {
+					event.Reason = fmt.Sprintf("Container exited with %s signal. This is most probably a system error.", signal)
+				} else {
+					event.Reason = fmt.Sprintf("Container exited with %d exit code", event.ExitCode)
 
-		for _, status := range instance.Status.ContainerStatuses {
-			if status.State.Terminated != nil && status.LastTerminationState.Terminated != nil {
-				event := &models.ContainerEvent{
-					Name:     status.Name,
-					ExitCode: status.LastTerminationState.Terminated.ExitCode,
-				}
-
-				if event.Reason == "" {
-					if signal, ok := containerSignals[event.ExitCode]; ok {
-						event.Reason = fmt.Sprintf("Container exited with %s signal. This is most probably a system error.", signal)
+					if event.ExitCode > 128 {
+						event.Reason = fmt.Sprintf("%s. This is most probably a system error.", event.Reason)
 					} else {
-						event.Reason = fmt.Sprintf("Container exited with %d exit code", event.ExitCode)
-
-						if event.ExitCode > 128 {
-							event.Reason = fmt.Sprintf("%s. This is most probably a system error.", event.Reason)
-						} else {
-							event.Reason = fmt.Sprintf("%s. This is most probably an application error.", event.Reason)
-						}
+						event.Reason = fmt.Sprintf("%s. This is most probably an application error.", event.Reason)
 					}
-
-					event.Message = status.LastTerminationState.Terminated.Message
 				}
 
-				containerEvents[status.Name] = event
+				event.Message = status.LastTerminationState.Terminated.Message
 			}
+
+			containerEvents[status.Name] = event
 		}
+	}
 
-		if strings.Contains(instance.Status.Reason, "OOM") {
-			// an out of memory error
-		}
+	// if len(containerEvents) == 0 {
+	// r.logger.Info("setting pod to resolved")
 
-		event := &models.PodEvent{
-			PodName:         instance.Name,
-			Namespace:       instance.Namespace,
-			OwnerName:       ownerName,
-			OwnerType:       ownerKind,
-			Timestamp:       time.Now().Unix(),
-			Phase:           string(instance.Status.Phase),
-			ContainerEvents: containerEvents,
-		}
+	// r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
 
-		event.Status = fmt.Sprintf("Type: %s, Status: %s", instance.Status.Conditions[0].Type,
-			instance.Status.Conditions[0].Status)
-		event.Reason, event.Message = r.getReasonAndMessage(instance, event.OwnerType)
+	// return ctrl.Result{}, nil // FIXME: better introspection to requeue here
+	// }
+	r.logger.Info("container events created.", "length", len(containerEvents))
 
-		if exists, err := r.RedisClient.IncidentExists(ctx, incidentID); err != nil {
+	if strings.Contains(instance.Status.Reason, "OOM") {
+		// an out of memory error
+	}
+
+	event := &models.PodEvent{
+		PodName:         instance.Name,
+		Namespace:       instance.Namespace,
+		OwnerName:       ownerName,
+		OwnerType:       ownerKind,
+		Timestamp:       time.Now().Unix(),
+		Phase:           string(instance.Status.Phase),
+		ContainerEvents: containerEvents,
+	}
+
+	event.Status = fmt.Sprintf("Type: %s, Status: %s", instance.Status.Conditions[0].Type,
+		instance.Status.Conditions[0].Status)
+	event.Reason, event.Message = r.getReasonAndMessage(instance, event.OwnerType)
+
+	r.logger.Info("checking for incident existence")
+	if exists, err := r.redisClient.IncidentExists(ctx, incidentID); err != nil {
+		return ctrl.Result{Requeue: true}, err
+	} else if exists {
+		r.logger.Info("incident already exists")
+		// do not add duplicate events when possible
+		r.logger.Info("fetching latest event for incident")
+		latestEvent, err := r.redisClient.GetLatestEventForIncident(ctx, incidentID)
+		if err != nil {
 			return ctrl.Result{Requeue: true}, err
-		} else if exists {
-			// do not add duplicate events when possible
-			latestEvent, err := r.RedisClient.GetLatestEventForIncident(ctx, incidentID)
-			if err != nil {
-				return ctrl.Result{Requeue: true}, err
-			}
-
+		} else if latestEvent != nil {
 			if latestEvent.Reason == event.Reason && latestEvent.Message == event.Reason {
 				// since both the reason and the message are the same as the latest event for this incident,
 				// we now check if this new event is an exact copy of the latest event
@@ -248,94 +265,98 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 				}
 
 				if !newEvent {
+					r.logger.Info("duplicate event")
 					return ctrl.Result{}, nil
 				}
 			}
 		}
+	}
 
-		for containerName, containerEvent := range event.ContainerEvents {
-			logOptions := &corev1.PodLogOptions{
-				TailLines: &maxTailLines,
-				Container: containerName,
-			}
-
-			req := r.KubeClient.
-				CoreV1().
-				Pods(instance.Name).
-				GetLogs(instance.Name, logOptions)
-
-			podLogs, err := req.Stream(ctx)
-			if err != nil {
-				r.logger.Error(err, "error streaming logs")
-				return ctrl.Result{Requeue: true}, err
-			}
-			defer podLogs.Close()
-
-			logs := new(bytes.Buffer)
-			_, err = io.Copy(logs, podLogs)
-			if err != nil {
-				r.logger.Error(err, "unable to read logs")
-				return ctrl.Result{Requeue: true}, err
-			}
-
-			strLogs := logs.String()
-
-			logID, err := r.RedisClient.AddLogs(ctx, strLogs)
-			if err != nil {
-				r.logger.Error(err, "error adding new logs")
-				return ctrl.Result{Requeue: true}, err
-			}
-
-			containerEvent.LogID = logID
+	r.logger.Info("fetching logs for containers")
+	for containerName, containerEvent := range event.ContainerEvents {
+		logOptions := &corev1.PodLogOptions{
+			TailLines: &maxTailLines,
+			Previous:  true,
+			Container: containerName,
 		}
 
-		err = r.RedisClient.AddEventToIncident(ctx, incidentID, event)
-		if err != nil && strings.Contains(err.Error(), "max event count") {
-			return ctrl.Result{}, nil
-		} else if err != nil {
+		req := r.KubeClient.
+			CoreV1().
+			Pods(instance.Name).
+			GetLogs(instance.Name, logOptions)
+
+		podLogs, err := req.Stream(ctx)
+		if err != nil {
+			r.logger.Error(err, "error streaming logs")
+			return ctrl.Result{Requeue: true}, err
+		}
+		defer podLogs.Close()
+
+		logs := new(bytes.Buffer)
+		_, err = io.Copy(logs, podLogs)
+		if err != nil {
+			r.logger.Error(err, "unable to read logs")
 			return ctrl.Result{Requeue: true}, err
 		}
 
-		r.addToQueue(ctx, req, instance, true)
-		return ctrl.Result{}, nil
-	}
+		strLogs := logs.String()
 
-	// if its a job, check the container statuses for status and exit code
-	_, ownerType := r.getOwnerDetails(ctx, req, instance)
-	if ownerType == "Job" {
-		err := r.checkJobPodForErrors(ctx, instance)
+		logID, err := r.redisClient.AddLogs(ctx, strLogs)
 		if err != nil {
-			r.addToQueue(ctx, req, instance, true)
-		} else {
-			r.addToQueue(ctx, req, instance, false)
+			r.logger.Error(err, "error adding new logs")
+			return ctrl.Result{Requeue: true}, err
 		}
 
-		r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{
-			ContainerNamesToFetchLogs: []string{"job"},
-		})
+		containerEvent.LogID = logID
+	}
 
+	r.logger.Info("adding event to incident")
+	err = r.redisClient.AddEventToIncident(ctx, incidentID, event)
+	if err != nil && strings.Contains(err.Error(), "max event count") {
+		r.logger.Error(err, "max events reached for incident")
 		return ctrl.Result{}, nil
+	} else if err != nil {
+		r.logger.Error(err, "error adding event to incident")
+		return ctrl.Result{Requeue: true}, err
 	}
 
-	if latestCondition.Status == corev1.ConditionFalse {
-		// latest condition status is false, hence trigger notification
-		r.addToQueue(ctx, req, instance, true)
-	} else {
-		// trigger with critical false
-		r.addToQueue(ctx, req, instance, false)
-	}
-
-	// fetch and enqueue latest logs
-	r.logger.Info("processing logs for pod", "status", instance.Status)
-	if len(instance.Spec.Containers) > 1 {
-		r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{
-			ContainerNamesToFetchLogs: []string{instance.Spec.Containers[0].Name},
-		})
-	} else {
-		r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{})
-	}
-
+	// r.addToQueue(ctx, req, instance, true)
 	return ctrl.Result{}, nil
+
+	// // if its a job, check the container statuses for status and exit code
+	// _, ownerType := r.getOwnerDetails(ctx, req, instance)
+	// if ownerType == "Job" {
+	// 	err := r.checkJobPodForErrors(ctx, instance)
+	// 	if err != nil {
+	// 		r.addToQueue(ctx, req, instance, true)
+	// 	} else {
+	// 		r.addToQueue(ctx, req, instance, false)
+	// 	}
+
+	// 	r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{
+	// 		ContainerNamesToFetchLogs: []string{"job"},
+	// 	})
+
+	// 	return ctrl.Result{}, nil
+	// }
+
+	// if latestCondition.Status == corev1.ConditionFalse {
+	// 	// latest condition status is false, hence trigger notification
+	// 	r.addToQueue(ctx, req, instance, true)
+	// } else {
+	// 	// trigger with critical false
+	// 	r.addToQueue(ctx, req, instance, false)
+	// }
+
+	// // fetch and enqueue latest logs
+	// r.logger.Info("processing logs for pod", "status", instance.Status)
+	// if len(instance.Spec.Containers) > 1 {
+	// 	r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{
+	// 		ContainerNamesToFetchLogs: []string{instance.Spec.Containers[0].Name},
+	// 	})
+	// } else {
+	// 	r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{})
+	// }
 }
 
 func (r *PodReconciler) checkJobPodForErrors(ctx context.Context, instance *corev1.Pod) error {

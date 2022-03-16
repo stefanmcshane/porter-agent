@@ -28,6 +28,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -39,7 +41,6 @@ import (
 	"github.com/porter-dev/porter-agent/controllers"
 	"github.com/porter-dev/porter-agent/pkg/consumer"
 	"github.com/porter-dev/porter-agent/pkg/processor"
-	"github.com/porter-dev/porter-agent/pkg/redis"
 	"github.com/porter-dev/porter-agent/pkg/server/routes"
 	"github.com/spf13/viper"
 	//+kubebuilder:scaffold:imports
@@ -102,27 +103,40 @@ func main() {
 		os.Exit(1)
 	}
 
-	redisClient := redis.NewClient(redisHost, redisPort, "", "", redis.PODSTORE, maxTailLines)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	// first check if the redis server is running and wait for it if needed
+	kubeClient := kubernetes.NewForConfigOrDie(mgr.GetConfig())
+	for {
+		pods, err := kubeClient.CoreV1().Pods("porter-agent-system").List(
+			context.Background(), v1.ListOptions{
+				LabelSelector: "app.kubernetes.io/name=redis",
+			},
+		)
 
-	if firstRun, err := redisClient.IsFirstRun(ctx); err != nil {
-		setupLog.Error(err, "error checking for first run of agent")
-		os.Exit(1)
-	} else if firstRun {
-		err = redisClient.SetAgentCreationTimestamp(ctx)
-		if err != nil {
-			setupLog.Error(err, "error setting agent creation timestamp")
-			os.Exit(1)
+		if err == nil && len(pods.Items) > 0 {
+			running := false
+
+			for _, pod := range pods.Items {
+				if pod.Status.Phase == corev1.PodRunning {
+					running = true
+					break
+				}
+			}
+
+			if running {
+				break
+			}
 		}
+
+		setupLog.Info("waiting for redis ...")
+		time.Sleep(time.Second * 2)
 	}
 
 	if err = (&controllers.PodReconciler{
-		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		RedisClient: redisClient,
-		KubeClient:  kubernetes.NewForConfigOrDie(mgr.GetConfig()),
-		Processor:   processor.NewPodEventProcessor(mgr.GetConfig()),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		// RedisClient: redis.NewClient(redisHost, redisPort, "", "", redis.PODSTORE, maxTailLines),
+		KubeClient: kubernetes.NewForConfigOrDie(mgr.GetConfig()),
+		Processor:  processor.NewPodEventProcessor(mgr.GetConfig()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pod")
 		os.Exit(1)

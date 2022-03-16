@@ -245,7 +245,7 @@ func (c *Client) IsFirstRun(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	if exists == 1 {
+	if exists == 0 {
 		return true, nil
 	}
 
@@ -253,12 +253,12 @@ func (c *Client) IsFirstRun(ctx context.Context) (bool, error) {
 }
 
 func (c *Client) SetAgentCreationTimestamp(ctx context.Context) error {
-	exists, err := c.IsFirstRun(ctx)
+	firstRun, err := c.IsFirstRun(ctx)
 	if err != nil {
 		return err
 	}
 
-	if exists {
+	if !firstRun {
 		return fmt.Errorf("agent timestamp already exists in Redis")
 	}
 
@@ -279,6 +279,20 @@ func (c *Client) GetAgentCreationTimestamp(ctx context.Context) (int64, error) {
 
 	key := "porter-agent-creation-timestamp"
 
+	fmt.Println("trying to check for first run")
+
+	if firstRun, err := c.IsFirstRun(ctx); err != nil {
+		return 0, err
+	} else if firstRun {
+		fmt.Println("first run")
+		err = c.SetAgentCreationTimestamp(ctx)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	fmt.Println("trying to get value of first run")
+
 	value, err := c.client.Get(ctx, key).Result()
 	if err != nil {
 		return 0, err
@@ -288,6 +302,8 @@ func (c *Client) GetAgentCreationTimestamp(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+
+	fmt.Println("setting agentCreationTimestamp")
 
 	agentCreationTimestamp = timestamp
 
@@ -320,6 +336,11 @@ func (c *Client) GetLatestEventForIncident(ctx context.Context, incidentID strin
 	}).Result()
 	if err != nil {
 		return nil, err
+	}
+
+	if len(data) == 0 {
+		// no latest event exists, possibly a new incident
+		return nil, nil
 	}
 
 	payload, ok := data[0].Member.(string)
@@ -538,9 +559,11 @@ func (c *Client) GetLatestReasonAndMessage(ctx context.Context, incidentID strin
 	event, err := c.GetLatestEventForIncident(ctx, incidentID)
 	if err != nil {
 		return "", "", err
+	} else if event != nil {
+		return event.Reason, event.Message, nil
 	}
 
-	return event.Reason, event.Message, nil
+	return "", "", nil
 }
 
 func (c *Client) GetOrCreateActiveIncident(ctx context.Context, releaseName, namespace string) (string, error) {
@@ -561,6 +584,8 @@ func (c *Client) GetOrCreateActiveIncident(ctx context.Context, releaseName, nam
 			return "", fmt.Errorf("error creating new active incident for release %s with namespace %s. Error: %w",
 				releaseName, namespace, err)
 		}
+
+		return newIncident.ToString(), nil
 	} else if exists == 1 {
 		incidentID, err := c.client.Get(ctx, key).Result()
 		if err != nil {
