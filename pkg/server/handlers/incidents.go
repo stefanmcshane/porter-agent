@@ -25,7 +25,7 @@ func GetAllIncidents(c *gin.Context) {
 	for _, id := range incidentIDs {
 		incidentObj, err := utils.NewIncidentFromString(id)
 		if err != nil {
-			httpLogger.Error(err, "error getting incident object from ID:", id)
+			httpLogger.Error(err, "error getting incident object", "incidentID", id)
 
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "internal server error",
@@ -40,7 +40,7 @@ func GetAllIncidents(c *gin.Context) {
 
 		resolved, err := redisClient.IsIncidentResolved(c.Copy(), id)
 		if err != nil {
-			httpLogger.Error(err, "error checking if incident with ID: %s resolved:", id)
+			httpLogger.Error(err, "error checking if incident is resolved", "incidentID", id)
 
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "internal server error",
@@ -56,7 +56,7 @@ func GetAllIncidents(c *gin.Context) {
 
 		incident.LatestReason, incident.LatestMessage, err = redisClient.GetLatestReasonAndMessage(c.Copy(), id)
 		if err != nil {
-			httpLogger.Error(err, "error fetching latest reason and messaged for incident ID:", id)
+			httpLogger.Error(err, "error fetching latest reason and messaged", "incidentID", id)
 
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "internal server error",
@@ -78,7 +78,7 @@ func GetIncidentsByReleaseNamespace(c *gin.Context) {
 
 	incidentIDs, err := redisClient.GetIncidentsByReleaseNamespace(c.Copy(), releaseName, namespace)
 	if err != nil {
-		httpLogger.Error(err, "error getting incidents for release:", releaseName)
+		httpLogger.Error(err, "error getting incidents for release", "releaseName", releaseName)
 
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
@@ -106,7 +106,7 @@ func GetIncidentsByReleaseNamespace(c *gin.Context) {
 
 		resolved, err := redisClient.IsIncidentResolved(c.Copy(), id)
 		if err != nil {
-			httpLogger.Error(err, "error checking if incident with ID: %s resolved:", id)
+			httpLogger.Error(err, "error checking if incident is resolved", "incidentID", id)
 
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "internal server error",
@@ -122,7 +122,7 @@ func GetIncidentsByReleaseNamespace(c *gin.Context) {
 
 		incident.LatestReason, incident.LatestMessage, err = redisClient.GetLatestReasonAndMessage(c.Copy(), id)
 		if err != nil {
-			httpLogger.Error(err, "error fetching latest reason and messaged for incident ID:", id)
+			httpLogger.Error(err, "error fetching latest reason and messaged", "incidentID", id)
 
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "internal server error",
@@ -143,7 +143,7 @@ func GetIncidentEventsByID(c *gin.Context) {
 
 	exists, err := redisClient.IncidentExists(c.Copy(), incidentID)
 	if err != nil {
-		httpLogger.Error(err, "error checking for existence of incident ID:", incidentID)
+		httpLogger.Error(err, "error checking for existence of incident", "incidentID", incidentID)
 
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
@@ -160,7 +160,7 @@ func GetIncidentEventsByID(c *gin.Context) {
 
 	events, err := redisClient.GetIncidentEventsByID(c.Copy(), incidentID)
 	if err != nil {
-		httpLogger.Error(err, "error getting incidents incident ID:", incidentID)
+		httpLogger.Error(err, "error getting events for incident", "incidentID", incidentID)
 
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",
@@ -180,7 +180,7 @@ func GetLogs(c *gin.Context) {
 	logs, err := redisClient.GetLogs(c.Copy(), logID)
 	if err != nil {
 		if strings.Contains(err.Error(), "no such logs") {
-			httpLogger.Error(err, "no such logs with log ID:", logID)
+			httpLogger.Error(err, "no such logs", "logID", logID)
 
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": "no such logs",
@@ -188,7 +188,7 @@ func GetLogs(c *gin.Context) {
 			return
 		}
 
-		httpLogger.Error(err, "error getting logs log ID:", logID)
+		httpLogger.Error(err, "error getting logs", "logID", logID)
 
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "internal server error",

@@ -326,12 +326,10 @@ func (c *Client) IncidentExists(ctx context.Context, incident string) (bool, err
 
 func (c *Client) GetLatestEventForIncident(ctx context.Context, incidentID string) (*models.PodEvent, error) {
 	data, err := c.client.ZRangeArgsWithScores(ctx, goredis.ZRangeArgs{
-		Key:     incidentID,
-		Start:   0,
-		Stop:    -1,
-		ByScore: true,
-		Rev:     true,
-		Count:   1,
+		Key:   incidentID,
+		Start: 0,
+		Stop:  -1,
+		Rev:   true,
 	}).Result()
 	if err != nil {
 		return nil, err
@@ -387,9 +385,13 @@ func (c *Client) AddEventToIncident(ctx context.Context, incidentID string, even
 		return fmt.Errorf("error marshalling to JSON with event ID: %s. Error: %w", event.EventID, err)
 	}
 
-	_, err = c.client.ZAdd(ctx, incidentID, &goredis.Z{
-		Score:  float64(score),
-		Member: eventJSON,
+	_, err = c.client.ZAddArgs(ctx, incidentID, goredis.ZAddArgs{
+		Members: []goredis.Z{
+			{
+				Score:  float64(score),
+				Member: eventJSON,
+			},
+		},
 	}).Result()
 	if err != nil {
 		return fmt.Errorf("error adding new pod event to incident with ID: %s. Error: %w", incidentID, err)
@@ -488,7 +490,13 @@ func (c *Client) GetIncidentsByReleaseNamespace(ctx context.Context, releaseName
 }
 
 func (c *Client) GetIncidentEventsByID(ctx context.Context, incidentID string) ([]*models.PodEvent, error) {
-	payload, err := c.client.ZRangeWithScores(ctx, incidentID, 0, -1).Result()
+	payload, err := c.client.ZRangeArgsWithScores(ctx, goredis.ZRangeArgs{
+		Key:   incidentID,
+		Start: 0,
+		Stop:  -1,
+		Rev:   true,
+	}).Result()
+
 	if err != nil {
 		return nil, err
 	}
