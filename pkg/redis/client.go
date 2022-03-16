@@ -488,14 +488,7 @@ func (c *Client) GetIncidentsByReleaseNamespace(ctx context.Context, releaseName
 }
 
 func (c *Client) GetIncidentEventsByID(ctx context.Context, incidentID string) ([]*models.PodEvent, error) {
-	payload, err := c.client.ZRangeArgsWithScores(ctx, goredis.ZRangeArgs{
-		Key:     incidentID,
-		Start:   0,
-		Stop:    -1,
-		ByScore: true,
-		Rev:     true,
-		Count:   500, // let us enforce a total of 500 pod events here, FIXME: this should happen while adding new events
-	}).Result()
+	payload, err := c.client.ZRangeWithScores(ctx, incidentID, 0, -1).Result()
 	if err != nil {
 		return nil, err
 	}
