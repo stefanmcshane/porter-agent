@@ -11,7 +11,6 @@ import (
 	"time"
 
 	goredis "github.com/go-redis/redis/v8"
-	"github.com/google/uuid"
 	porterErrors "github.com/porter-dev/porter-agent/pkg/errors"
 	"github.com/porter-dev/porter-agent/pkg/models"
 	"github.com/porter-dev/porter-agent/pkg/utils"
@@ -524,14 +523,40 @@ func (c *Client) GetIncidentEventsByID(ctx context.Context, incidentID string) (
 	return events, nil
 }
 
-func (c *Client) AddLogs(ctx context.Context, strLogs string) (string, error) {
-	logID := uuid.New().String()
+func (c *Client) AddLogs(ctx context.Context, incidentID, strLogs string) (string, error) {
+	logID := fmt.Sprintf("log:%s:%d", incidentID, time.Now().Unix())
 
-	if _, err := c.client.Set(ctx, fmt.Sprintf("log:%s", logID), strLogs, time.Hour*24*14).Result(); err != nil {
+	if _, err := c.client.Set(ctx, logID, strLogs, time.Hour*24*14).Result(); err != nil {
 		return "", errors.New("error adding logs")
 	}
 
 	return logID, nil
+}
+
+func (c *Client) DuplicateLogs(ctx context.Context, incidentID, strLogs string) (bool, error) {
+	// check if any logs exist for this incident
+	logIDs, err := c.client.Keys(ctx, fmt.Sprintf("log:%s:*", incidentID)).Result()
+	if err != nil {
+		return false, fmt.Errorf("error getting all logs for incident ID: %s. Error: %w", incidentID, err)
+	}
+
+	if len(logIDs) == 0 {
+		return false, nil
+	}
+
+	for _, logID := range logIDs {
+		log, err := c.client.Get(ctx, logID).Result()
+		if err != nil {
+			return false, fmt.Errorf("error getting logs with ID: %s while checking for duplicate logs. Error: %w",
+				logID, err)
+		}
+
+		if log == strLogs {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func (c *Client) GetLogs(ctx context.Context, logID string) (string, error) {

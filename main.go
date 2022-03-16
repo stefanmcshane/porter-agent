@@ -156,8 +156,8 @@ func main() {
 	setupLog.Info("creating event consumer")
 	eventConsumer = consumer.NewEventConsumer(50, time.Millisecond, context.TODO())
 
-	setupLog.Info("starting event consumer")
-	go eventConsumer.Start()
+	// setupLog.Info("starting event consumer")
+	// go eventConsumer.Start()
 
 	setupLog.Info("starting HTTP server")
 	httpServer = routes.NewRouter()
