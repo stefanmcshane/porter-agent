@@ -18,6 +18,10 @@ type Interface interface {
 	// to trigger actual request for porter server in case of
 	// a Delete or Failed/Unknown Phase
 	AddToWorkQueue(context context.Context, object types.NamespacedName, details *models.EventDetails)
+
+	NotifyNewIncident(context.Context, string)
+
+	NotifyResolvedIncident(context.Context, string)
 }
 
 func (e *EnqueueDetailOptions) SetContainerName(podOptions *corev1.PodLogOptions) {

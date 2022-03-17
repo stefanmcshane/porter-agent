@@ -1,10 +1,10 @@
 package consumer
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"context"
@@ -93,46 +93,85 @@ func (e *EventConsumer) Start() {
 			continue
 		}
 
-		var payload *models.EventDetails
-		err = json.Unmarshal(value, &payload)
-		if err != nil {
-			// log error and continue
-			e.consumerLog.Error(err, "cannot unmarshal payload")
-			continue
+		// var payload *models.EventDetails
+		// err = json.Unmarshal(value, &payload)
+		// if err != nil {
+		// 	// log error and continue
+		// 	e.consumerLog.Error(err, "cannot unmarshal payload")
+		// 	continue
+		// }
+
+		// if payload.Critical {
+		// 	payload.EventType = models.EventCritical
+
+		// 	// include logs
+		// 	// err := e.injectLogs(payload)
+		// 	// if err != nil {
+		// 	// 	e.consumerLog.Error(err, "unable to inject logs")
+		// 	// }
+		// } else {
+		// 	payload.EventType = models.EventNormal
+		// }
+
+		// // in case of un-healthy to healthy pod transition, check and populate the message field
+		// if payload.Message == "" {
+		// 	payload.Message = models.UndeterminedState
+		// 	e.consumerLog.Info("empty message, setting to UndeterminedState")
+		// }
+
+		payload := string(value)
+		incidentID := ""
+		newIncident := false
+
+		if strings.HasPrefix(payload, "new:") {
+			newIncident = true
+			incidentID = strings.TrimPrefix(payload, "new:")
+		} else if strings.HasPrefix(payload, "resolved:") {
+			incidentID = strings.TrimPrefix(payload, "resolved:")
 		}
 
-		if payload.Critical {
-			payload.EventType = models.EventCritical
+		e.consumerLog.Info("doing HTTP post", "payload", payload)
 
-			// include logs
-			// err := e.injectLogs(payload)
-			// if err != nil {
-			// 	e.consumerLog.Error(err, "unable to inject logs")
-			// }
+		if newIncident {
+			if err = e.doHTTPPostNotifyNew(incidentID); err != nil {
+				// log error
+				e.consumerLog.Error(err, "error sending HTTP request to porter server for new incident", "payload", payload)
+
+				// requeue the object into the work queue
+				err := e.redisClient.RequeueItemWithScore(e.context, value, score)
+				if err != nil {
+					// log error and continue
+					e.consumerLog.Error(err, "error requeuing item in store with score", "payload", payload)
+					continue
+				}
+			}
 		} else {
-			payload.EventType = models.EventNormal
-		}
+			if err = e.doHTTPPostNotifyResolved(payload); err != nil {
+				// log error
+				e.consumerLog.Error(err, "error sending HTTP request to porter server for resolved incident", "payload", payload)
 
-		// in case of un-healthy to healthy pod transition, check and populate the message field
-		if payload.Message == "" {
-			payload.Message = models.UndeterminedState
-			e.consumerLog.Info("empty message, setting to UndeterminedState")
-		}
-
-		e.consumerLog.Info("doing HTTP post", "detail", payload)
-
-		if err = e.doHTTPPost(payload); err != nil {
-			// log error
-			e.consumerLog.Error(err, "error sending HTTP request to porter server")
-
-			// requeue the object into the work queue
-			err := e.redisClient.RequeueItemWithScore(e.context, value, score)
-			if err != nil {
-				// log error and continue
-				e.consumerLog.Error(err, "error requeuing item in store with score")
-				continue
+				// requeue the object into the work queue
+				err := e.redisClient.RequeueItemWithScore(e.context, value, score)
+				if err != nil {
+					// log error and continue
+					e.consumerLog.Error(err, "error requeuing item in store with score", "payload", payload)
+					continue
+				}
 			}
 		}
+
+		// if err = e.doHTTPPost(payload); err != nil {
+		// 	// log error
+		// 	e.consumerLog.Error(err, "error sending HTTP request to porter server")
+
+		// 	// requeue the object into the work queue
+		// 	err := e.redisClient.RequeueItemWithScore(e.context, value, score)
+		// 	if err != nil {
+		// 		// log error and continue
+		// 		e.consumerLog.Error(err, "error requeuing item in store with score")
+		// 		continue
+		// 	}
+		// }
 	}
 }
 
@@ -168,5 +207,33 @@ func (e *EventConsumer) doHTTPPost(payload *models.EventDetails) error {
 	}
 
 	e.consumerLog.Info(string(body))
+	return nil
+}
+
+func (e *EventConsumer) doHTTPPostNotifyNew(incidentID string) error {
+	_, err := e.httpClient.Post(fmt.Sprintf("/api/projects/%s/clusters/%s/incidents/notify_new", projectID, clusterID), map[string]string{
+		"incident_id": incidentID,
+	})
+
+	if err != nil {
+		// log and return error
+		e.consumerLog.Error(err, "error sending http request for new incident", "incidentID", incidentID)
+		return err
+	}
+
+	return nil
+}
+
+func (e *EventConsumer) doHTTPPostNotifyResolved(incidentID string) error {
+	_, err := e.httpClient.Post(fmt.Sprintf("/api/projects/%s/clusters/%s/incidents/notify_resolved", projectID, clusterID), map[string]string{
+		"incident_id": incidentID,
+	})
+
+	if err != nil {
+		// log and return error
+		e.consumerLog.Error(err, "error sending http request for resolved incident", "incidentID", incidentID)
+		return err
+	}
+
 	return nil
 }

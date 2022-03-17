@@ -244,7 +244,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	r.logger.Info("container events created.", "length", len(containerEvents))
 
-	incidentID, err := r.redisClient.GetOrCreateActiveIncident(ctx, ownerName, instance.Namespace)
+	incidentID, isNewIncident, err := r.redisClient.GetOrCreateActiveIncident(ctx, ownerName, instance.Namespace)
 	if err != nil {
 		return ctrl.Result{Requeue: true}, err
 	}
@@ -402,6 +402,10 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{Requeue: true}, err
 	}
 
+	if isNewIncident {
+		r.notifyNewIncident(ctx, incidentID)
+	}
+
 	// r.addToQueue(ctx, req, instance, true)
 	return ctrl.Result{}, nil
 
@@ -439,6 +443,10 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	// } else {
 	// 	r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{})
 	// }
+}
+
+func (r *PodReconciler) notifyNewIncident(ctx context.Context, incidentID string) {
+
 }
 
 func getFilteredReason(reason string) string {

@@ -643,12 +643,12 @@ func (c *Client) GetLatestReasonAndMessage(ctx context.Context, incidentID strin
 	return "", "", nil
 }
 
-func (c *Client) GetOrCreateActiveIncident(ctx context.Context, releaseName, namespace string) (string, error) {
+func (c *Client) GetOrCreateActiveIncident(ctx context.Context, releaseName, namespace string) (string, bool, error) {
 	key := fmt.Sprintf("active_incident:%s:%s", releaseName, namespace)
 
 	exists, err := c.client.Exists(ctx, key).Result()
 	if err != nil {
-		return "", fmt.Errorf("error checking for active incident for %s in namespace %s. Error: %w",
+		return "", false, fmt.Errorf("error checking for active incident for %s in namespace %s. Error: %w",
 			releaseName, namespace, err)
 	}
 
@@ -658,20 +658,20 @@ func (c *Client) GetOrCreateActiveIncident(ctx context.Context, releaseName, nam
 
 		_, err := c.client.Set(ctx, key, newIncident.ToString(), time.Hour*24*14).Result()
 		if err != nil {
-			return "", fmt.Errorf("error creating new active incident for release %s with namespace %s. Error: %w",
+			return "", false, fmt.Errorf("error creating new active incident for release %s with namespace %s. Error: %w",
 				releaseName, namespace, err)
 		}
 
-		return newIncident.ToString(), nil
+		return newIncident.ToString(), true, nil
 	} else if exists == 1 {
 		incidentID, err := c.client.Get(ctx, key).Result()
 		if err != nil {
-			return "", fmt.Errorf("error fetching active incident for %s in namespace %s. Error: %w",
+			return "", false, fmt.Errorf("error fetching active incident for %s in namespace %s. Error: %w",
 				releaseName, namespace, err)
 		}
 
-		return incidentID, nil
+		return incidentID, false, nil
 	}
 
-	return "", fmt.Errorf("error fetching active incident for %s in namespace %s", releaseName, namespace)
+	return "", false, fmt.Errorf("error fetching active incident for %s in namespace %s", releaseName, namespace)
 }

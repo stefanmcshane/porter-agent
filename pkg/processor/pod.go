@@ -164,3 +164,23 @@ func (p *PodEventProcessor) pushToWorkQueue(ctx context.Context, details *models
 
 	return nil
 }
+
+func (p *PodEventProcessor) NotifyNewIncident(ctx context.Context, incidentID string) {
+	logger := log.Log.WithName("event-processor")
+
+	err := p.redisClient.AppendToNotifyWorkQueue(ctx, []byte("new:"+incidentID))
+	if err != nil {
+		logger.Error(err, "error appending new incident to notify work queue", "incidentID", incidentID)
+		return
+	}
+}
+
+func (p *PodEventProcessor) NotifyResolvedIncident(ctx context.Context, incidentID string) {
+	logger := log.Log.WithName("event-processor")
+
+	err := p.redisClient.AppendToNotifyWorkQueue(ctx, []byte("resolved:"+incidentID))
+	if err != nil {
+		logger.Error(err, "error appending resolved incident to notify work queue", "incidentID", incidentID)
+		return
+	}
+}
