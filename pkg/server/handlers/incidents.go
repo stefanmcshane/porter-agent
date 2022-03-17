@@ -168,9 +168,39 @@ func GetIncidentEventsByID(c *gin.Context) {
 		return
 	}
 
+	resolved, err := redisClient.IsIncidentResolved(c.Copy(), incidentID)
+	if err != nil {
+		httpLogger.Error(err, "error checking if incident is resolved", "incidentID", incidentID)
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "internal server error",
+		})
+		return
+	}
+
+	latestState := "ONGOING"
+
+	if resolved {
+		latestState = "RESOLVED"
+	}
+
+	latestReason, latestMessage, err := redisClient.GetLatestReasonAndMessage(c.Copy(), incidentID)
+	if err != nil {
+		httpLogger.Error(err, "error fetching latest reason and messaged", "incidentID", incidentID)
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "internal server error",
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"incident_id": incidentID,
-		"events":      events,
+		"incident_id":    incidentID,
+		"release_name":   strings.Split(incidentID, ":")[1],
+		"latest_state":   latestState,
+		"latest_reason":  latestReason,
+		"latest_message": latestMessage,
+		"events":         events,
 	})
 }
 
