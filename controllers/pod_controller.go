@@ -237,7 +237,10 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	if len(containerEvents) == 0 {
-		// r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
+		incidentID, err := r.redisClient.GetActiveIncident(ctx, ownerName, instance.Namespace)
+		if err == nil {
+			r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
+		}
 
 		return ctrl.Result{}, nil // FIXME: better introspection to requeue here
 	}

@@ -453,6 +453,11 @@ func (c *Client) SetPodResolved(ctx context.Context, podName, incidentID string)
 		if err != nil {
 			return fmt.Errorf("error trying to remove %s from active_incident. Error: %w", incidentID, err)
 		}
+
+		err = c.AppendToNotifyWorkQueue(ctx, []byte("resolved:"+incidentID))
+		if err != nil {
+			return fmt.Errorf("error adding resolved incident to work queue with ID: %s. Error: %w", incidentID, err)
+		}
 	}
 
 	return nil
@@ -643,6 +648,18 @@ func (c *Client) GetLatestReasonAndMessage(ctx context.Context, incidentID strin
 	return "", "", nil
 }
 
+func (c *Client) GetActiveIncident(ctx context.Context, releaseName, namespace string) (string, error) {
+	key := fmt.Sprintf("active_incident:%s:%s", releaseName, namespace)
+
+	incidentID, err := c.client.Get(ctx, key).Result()
+	if err != nil {
+		return "", fmt.Errorf("error fetching active incident for %s in namespace %s. Error: %w",
+			releaseName, namespace, err)
+	}
+
+	return incidentID, nil
+}
+
 func (c *Client) GetOrCreateActiveIncident(ctx context.Context, releaseName, namespace string) (string, bool, error) {
 	key := fmt.Sprintf("active_incident:%s:%s", releaseName, namespace)
 
@@ -664,10 +681,9 @@ func (c *Client) GetOrCreateActiveIncident(ctx context.Context, releaseName, nam
 
 		return newIncident.ToString(), true, nil
 	} else if exists == 1 {
-		incidentID, err := c.client.Get(ctx, key).Result()
+		incidentID, err := c.GetActiveIncident(ctx, releaseName, namespace)
 		if err != nil {
-			return "", false, fmt.Errorf("error fetching active incident for %s in namespace %s. Error: %w",
-				releaseName, namespace, err)
+			return "", false, err
 		}
 
 		return incidentID, false, nil
