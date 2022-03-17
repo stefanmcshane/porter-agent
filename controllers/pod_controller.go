@@ -215,11 +215,33 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 	}
 
+	if len(containerEvents) == 0 && ownerKind == "Deployment" {
+		// check if pod's container is in waiting state, might be another container error
+		for i := len(instance.Status.ContainerStatuses) - 1; i >= 0; i-- {
+			status := instance.Status.ContainerStatuses[i]
+
+			if status.State.Waiting != nil && status.State.Waiting.Reason != "" {
+				reason = getFilteredReason(status.State.Waiting.Reason)
+
+				if !strings.HasPrefix(reason, "Kubernetes error:") {
+					// only consider it as an error if it is in our monitoring list of reasons
+					containerEvents[status.Name] = &models.ContainerEvent{
+						Name:    status.Name,
+						Reason:  reason,
+						Message: status.State.Waiting.Message,
+						LogID:   "NOOP",
+					}
+				}
+			}
+		}
+	}
+
 	if len(containerEvents) == 0 {
 		// r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
 
 		return ctrl.Result{}, nil // FIXME: better introspection to requeue here
 	}
+
 	r.logger.Info("container events created.", "length", len(containerEvents))
 
 	incidentID, err := r.redisClient.GetOrCreateActiveIncident(ctx, ownerName, instance.Namespace)
@@ -265,7 +287,15 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		if err != nil {
 			return ctrl.Result{Requeue: true}, err
 		} else if latestEvent != nil {
-			if latestEvent.Reason == event.Reason && latestEvent.Message == event.Reason {
+			// there is a special case when we get an "rpc error" followed by "Back-off pulling image"
+			// we want to avoid logging this duo if it already has occurred
+			if event.Reason == "Error while pulling image from container registry" &&
+				latestEvent.Reason == event.Reason {
+				// FIXME: a better way to check for this succession of events, perhaps?
+				return ctrl.Result{}, nil
+			}
+
+			if latestEvent.Reason == event.Reason && latestEvent.Message == event.Message {
 				// since both the reason and the message are the same as the latest event for this incident,
 				// we now check if this new event is an exact copy of the latest event
 				newEvent := false
@@ -301,6 +331,11 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	r.logger.Info("fetching logs for containers")
 	for containerName, containerEvent := range event.ContainerEvents {
+		if containerEvent.LogID == "NOOP" {
+			containerEvent.LogID = ""
+			continue
+		}
+
 		logOptions := &corev1.PodLogOptions{
 			TailLines: &maxTailLines,
 			Previous:  true,
