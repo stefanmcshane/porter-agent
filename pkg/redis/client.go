@@ -525,36 +525,87 @@ func (c *Client) GetIncidentEventsByID(ctx context.Context, incidentID string) (
 }
 
 func (c *Client) AddLogs(ctx context.Context, incidentID, strLogs string) (string, error) {
-	logID := fmt.Sprintf("log:%s:%d", incidentID, time.Now().Unix())
+	score := time.Now().Unix()
+
+	logID := fmt.Sprintf("log:%s:%d", incidentID, score)
 
 	if _, err := c.client.Set(ctx, logID, strLogs, time.Hour*24*14).Result(); err != nil {
 		return "", errors.New("error adding logs")
+	}
+
+	logsID := fmt.Sprintf("logs:%s", incidentID)
+
+	if _, err := c.client.ZAddArgs(ctx, logsID, goredis.ZAddArgs{
+		Members: []goredis.Z{
+			{
+				Score:  float64(score),
+				Member: logID,
+			},
+		},
+	}).Result(); err != nil {
+		return "", fmt.Errorf("error adding new log with ID: %s to logs set of incident ID: %s. Error: %w",
+			logID, incidentID, err)
+	}
+
+	if exists, err := c.client.Exists(ctx, logsID).Result(); err != nil {
+		return "", fmt.Errorf("error checking existence of logs set for incident ID: %s. Error: %w",
+			incidentID, err)
+	} else if exists == 0 {
+		incidentObj, err := utils.NewIncidentFromString(incidentID)
+		if err != nil {
+			return "", fmt.Errorf("error converting incident from string to object while creating new logs set for incident ID: %s. Error: %w",
+				incidentID, err)
+		}
+
+		if _, err := c.client.ExpireAt(ctx, logsID, incidentObj.GetTimestampAsTime().Add(time.Hour*24*14)).Result(); err != nil {
+			return "", fmt.Errorf("error setting expiration time for logs set for incident ID: %s. Error: %w",
+				incidentID, err)
+		}
 	}
 
 	return logID, nil
 }
 
 func (c *Client) DuplicateLogs(ctx context.Context, incidentID, strLogs string) (bool, error) {
-	// check if any logs exist for this incident
-	logIDs, err := c.client.Keys(ctx, fmt.Sprintf("log:%s:*", incidentID)).Result()
-	if err != nil {
-		return false, fmt.Errorf("error getting all logs for incident ID: %s. Error: %w", incidentID, err)
-	}
+	logsID := fmt.Sprintf("logs:%s", incidentID)
 
-	if len(logIDs) == 0 {
+	// check if any logs exist for this incident
+	if exists, err := c.client.Exists(ctx, logsID).Result(); err != nil {
+		return false, fmt.Errorf("error checking for logs set existence for incident ID: %s while checking for duplicate logs. Error: %w",
+			incidentID, err)
+	} else if exists == 0 {
 		return false, nil
 	}
 
-	for _, logID := range logIDs {
-		log, err := c.client.Get(ctx, logID).Result()
-		if err != nil {
-			return false, fmt.Errorf("error getting logs with ID: %s while checking for duplicate logs. Error: %w",
-				logID, err)
-		}
+	previousLogID, err := c.client.ZRangeArgsWithScores(ctx, goredis.ZRangeArgs{
+		Key:   logsID,
+		Start: 0,
+		Stop:  1,
+		Rev:   true,
+	}).Result()
+	if err != nil {
+		return false, fmt.Errorf("error getting log IDs from logs set for incident ID: %s. Error: %w",
+			incidentID, err)
+	}
 
-		if log == strLogs {
-			return true, nil
-		}
+	if len(previousLogID) == 0 {
+		// FIXME: do we need to check for existence before in this case?
+		return false, nil
+	}
+
+	logID, ok := previousLogID[0].Member.(string)
+	if !ok {
+		return false, fmt.Errorf("error converting logs set member to string for incident ID: %s", incidentID)
+	}
+
+	log, err := c.client.Get(ctx, logID).Result()
+	if err != nil {
+		return false, fmt.Errorf("error getting logs with ID: %s while checking for duplicate logs. Error: %w",
+			logID, err)
+	}
+
+	if log == strLogs {
+		return true, nil
 	}
 
 	return false, nil
