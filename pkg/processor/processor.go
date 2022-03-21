@@ -3,9 +3,7 @@ package processor
 import (
 	"context"
 
-	"github.com/porter-dev/porter-agent/pkg/models"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 )
 
 type EnqueueDetailOptions struct {
@@ -13,12 +11,6 @@ type EnqueueDetailOptions struct {
 }
 
 type Interface interface {
-	// Used in case of normal events to store and update logs
-	EnqueueDetails(context context.Context, object types.NamespacedName, options *EnqueueDetailOptions)
-	// to trigger actual request for porter server in case of
-	// a Delete or Failed/Unknown Phase
-	AddToWorkQueue(context context.Context, object types.NamespacedName, details *models.EventDetails)
-
 	NotifyNewIncident(context.Context, string)
 
 	NotifyResolvedIncident(context.Context, string)

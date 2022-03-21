@@ -409,43 +409,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		r.notifyNewIncident(ctx, incidentID)
 	}
 
-	// r.addToQueue(ctx, req, instance, true)
 	return ctrl.Result{}, nil
-
-	// // if its a job, check the container statuses for status and exit code
-	// _, ownerType := r.getOwnerDetails(ctx, req, instance)
-	// if ownerType == "Job" {
-	// 	err := r.checkJobPodForErrors(ctx, instance)
-	// 	if err != nil {
-	// 		r.addToQueue(ctx, req, instance, true)
-	// 	} else {
-	// 		r.addToQueue(ctx, req, instance, false)
-	// 	}
-
-	// 	r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{
-	// 		ContainerNamesToFetchLogs: []string{"job"},
-	// 	})
-
-	// 	return ctrl.Result{}, nil
-	// }
-
-	// if latestCondition.Status == corev1.ConditionFalse {
-	// 	// latest condition status is false, hence trigger notification
-	// 	r.addToQueue(ctx, req, instance, true)
-	// } else {
-	// 	// trigger with critical false
-	// 	r.addToQueue(ctx, req, instance, false)
-	// }
-
-	// // fetch and enqueue latest logs
-	// r.logger.Info("processing logs for pod", "status", instance.Status)
-	// if len(instance.Spec.Containers) > 1 {
-	// 	r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{
-	// 		ContainerNamesToFetchLogs: []string{instance.Spec.Containers[0].Name},
-	// 	})
-	// } else {
-	// 	r.Processor.EnqueueDetails(ctx, req.NamespacedName, &processor.EnqueueDetailOptions{})
-	// }
 }
 
 func (r *PodReconciler) notifyNewIncident(ctx context.Context, incidentID string) {
@@ -483,25 +447,6 @@ func (r *PodReconciler) checkJobPodForErrors(ctx context.Context, instance *core
 	}
 
 	return nil
-}
-
-func (r *PodReconciler) addToQueue(ctx context.Context, req ctrl.Request, instance *corev1.Pod, isCritical bool) {
-	eventDetails := &models.EventDetails{
-		ResourceType: models.PodResource,
-		Name:         req.Name,
-		Namespace:    req.Namespace,
-		Critical:     isCritical,
-		Timestamp:    getTime(),
-		Phase:        string(instance.Status.Phase),
-		Status:       fmt.Sprintf("Type: %s, Status: %s", instance.Status.Conditions[0].Type, instance.Status.Conditions[0].Status),
-	}
-
-	eventDetails.OwnerName, eventDetails.OwnerType = r.getOwnerDetails(ctx, req, instance)
-	eventDetails.Reason, eventDetails.Message = r.getReasonAndMessage(instance, eventDetails.OwnerType)
-
-	r.logger.Info("populated owner details", "details", eventDetails)
-
-	r.Processor.AddToWorkQueue(ctx, req.NamespacedName, eventDetails)
 }
 
 func (r *PodReconciler) getReasonAndMessage(instance *corev1.Pod, ownerType string) (string, string) {
