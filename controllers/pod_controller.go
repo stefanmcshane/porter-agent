@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"time"
 
@@ -268,6 +269,11 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		incidentID, err := r.redisClient.GetActiveIncident(ctx, ownerName, instance.Namespace)
 		if err == nil {
 			r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
+
+			if ownerKind == "Job" {
+				// since a job has one running pod at a time and here we know that it has run successfully
+				r.redisClient.SetJobIncidentResolved(ctx, incidentID) // FIXME: make use of the error
+			}
 		}
 
 		return ctrl.Result{}, nil // FIXME: better introspection to requeue here
@@ -323,6 +329,11 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 			if event.Reason == "Error while pulling image from container registry" &&
 				latestEvent.Reason == event.Reason {
 				// FIXME: a better way to check for this succession of events, perhaps?
+				return ctrl.Result{}, nil
+			}
+
+			if strings.HasPrefix(event.Message, "back-off") {
+				// FIXME: right now we just ignore these back-off errors
 				return ctrl.Result{}, nil
 			}
 
@@ -423,6 +434,12 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 	}
 
+	event.Message = getFilteredMessage(event.Message)
+
+	for _, containerEvent := range event.ContainerEvents {
+		containerEvent.Message = getFilteredMessage(containerEvent.Message)
+	}
+
 	r.logger.Info("adding event to incident")
 	err = r.redisClient.AddEventToIncident(ctx, incidentID, event)
 	if err != nil && strings.Contains(err.Error(), "max event count") {
@@ -442,6 +459,31 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 func (r *PodReconciler) notifyNewIncident(ctx context.Context, incidentID string) {
 
+}
+
+func getFilteredMessage(message string) string {
+	regex := regexp.MustCompile("failed to start container \".*?\"")
+	matches := regex.FindStringSubmatch(message)
+
+	filteredMsg := ""
+
+	if len(matches) > 0 {
+		containerName := strings.Split(matches[0], "\"")[1]
+		filteredMsg = "In container \"" + containerName + "\": "
+	}
+
+	regex = regexp.MustCompile("starting container process caused:.*$")
+	matches = regex.FindStringSubmatch(message)
+
+	if len(matches) > 0 {
+		filteredMsg += strings.TrimPrefix(matches[0], "starting container process caused: ")
+	}
+
+	if filteredMsg == "" {
+		return message
+	}
+
+	return filteredMsg
 }
 
 func getFilteredReason(reason string) string {

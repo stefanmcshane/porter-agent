@@ -463,6 +463,29 @@ func (c *Client) SetPodResolved(ctx context.Context, podName, incidentID string)
 	return nil
 }
 
+func (c *Client) SetJobIncidentResolved(ctx context.Context, incidentID string) error {
+	if exists, err := c.IncidentExists(ctx, incidentID); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("trying to set job incident resolved for non-existent incident with ID: %s", incidentID)
+	}
+
+	incidentObj, _ := utils.NewIncidentFromString(incidentID)
+
+	_, err := c.client.Del(ctx, fmt.Sprintf("pods:%s", incidentID)).Result()
+	if err != nil {
+		return fmt.Errorf("error trying to remove pods for resolved job incident ID: %s. Error: %w", incidentID, err)
+	}
+
+	_, err = c.client.Del(ctx, fmt.Sprintf("active_incident:%s:%s", incidentObj.GetReleaseName(),
+		incidentObj.GetNamespace())).Result()
+	if err != nil {
+		return fmt.Errorf("error trying to remove %s from active_incident. Error: %w", incidentID, err)
+	}
+
+	return nil
+}
+
 func (c *Client) IsIncidentResolved(ctx context.Context, incidentID string) (bool, error) {
 	pods, err := c.client.SMembers(ctx, fmt.Sprintf("pods:%s", incidentID)).Result()
 	if err != nil {
