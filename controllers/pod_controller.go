@@ -32,7 +32,6 @@ import (
 	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -107,15 +106,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	instance := &corev1.Pod{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			// must have been a delete event
-			r.logger.Info("pod deleted")
-
-			// TODO: triggerNotify
-			return ctrl.Result{}, nil
-		}
-
-		return ctrl.Result{}, err
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	if instance.Namespace == "cert-manager" || instance.Namespace == "ingress-nginx" ||
@@ -128,10 +119,49 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	agentCreationTimestamp, err := r.redisClient.GetAgentCreationTimestamp(ctx)
 	if err != nil {
 		r.logger.Error(err, "redisClient.GetAgentCreationTimestamp ERROR")
-		return ctrl.Result{Requeue: true}, err
+		return ctrl.Result{}, err
 	}
 
 	if instance.GetCreationTimestamp().Unix() < agentCreationTimestamp {
+		return ctrl.Result{}, nil
+	}
+
+	ownerName, ownerKind := r.getOwnerDetails(ctx, req, instance)
+
+	customFinalizer := "porter.run/agent-finalizer"
+
+	finalizers := instance.Finalizers
+	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
+		found := false
+		for _, fin := range finalizers {
+			if fin == customFinalizer {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			instance.SetFinalizers(append(finalizers, customFinalizer))
+			if err := r.Update(ctx, instance); err != nil {
+				return ctrl.Result{Requeue: true}, fmt.Errorf("error adding custom finalizer: %w", err)
+			}
+		}
+	} else {
+		found := false
+		for _, fin := range finalizers {
+			if fin == customFinalizer {
+				found = true
+				break
+			}
+		}
+
+		if found {
+			incidentID, err := r.redisClient.GetActiveIncident(ctx, ownerName, instance.Namespace)
+			if err == nil {
+				r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
+			}
+		}
+
 		return ctrl.Result{}, nil
 	}
 
@@ -156,8 +186,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	// else we still have the object
 	// we can log the current condition
-
-	ownerName, ownerKind := r.getOwnerDetails(ctx, req, instance)
 
 	reason := string(instance.Status.Phase)
 	if instance.Status.Reason != "" {
@@ -577,8 +605,4 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Pod{}).
 		Complete(r)
-}
-
-func getTime() string {
-	return time.Now().Format(time.RFC3339)
 }
