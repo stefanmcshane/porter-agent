@@ -505,6 +505,13 @@ func (c *Client) GetAllIncidents(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 
+	sort.SliceStable(incidents, func(i, j int) bool {
+		objA, _ := utils.NewIncidentFromString(incidents[i])
+		objB, _ := utils.NewIncidentFromString(incidents[j])
+
+		return objA.GetTimestamp() > objB.GetTimestamp()
+	})
+
 	return incidents, nil
 }
 
@@ -513,6 +520,13 @@ func (c *Client) GetIncidentsByReleaseNamespace(ctx context.Context, releaseName
 	if err != nil {
 		return nil, err
 	}
+
+	sort.SliceStable(incidents, func(i, j int) bool {
+		objA, _ := utils.NewIncidentFromString(incidents[i])
+		objB, _ := utils.NewIncidentFromString(incidents[j])
+
+		return objA.GetTimestamp() > objB.GetTimestamp()
+	})
 
 	return incidents, nil
 }
