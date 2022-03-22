@@ -492,8 +492,6 @@ func getFilteredReason(reason string) string {
 		return "Container is in a crash loop"
 	} else if reason == "ImagePullBackOff" || reason == "ErrImagePull" {
 		return "Error while pulling image from container registry"
-	} else if reason == "InvalidImageName" {
-		return "Malformed or invalid image URL"
 	} else if reason == "OOMKilled" {
 		return "Out-of-memory, resources exhausted"
 	} else if reason == "Error" {
@@ -505,18 +503,6 @@ func getFilteredReason(reason string) string {
 	}
 
 	return "Kubernetes error: " + reason
-}
-
-func (r *PodReconciler) checkJobPodForErrors(ctx context.Context, instance *corev1.Pod) error {
-	for _, containerStatus := range instance.Status.ContainerStatuses {
-		if containerStatus.State.Terminated != nil {
-			if containerStatus.State.Terminated.ExitCode != 0 {
-				return fmt.Errorf("container %s returned with non zero exit code", containerStatus.Name)
-			}
-		}
-	}
-
-	return nil
 }
 
 func (r *PodReconciler) getReasonAndMessage(instance *corev1.Pod, ownerType string) (string, string) {

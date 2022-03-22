@@ -654,23 +654,6 @@ func (c *Client) GetLogs(ctx context.Context, logID string) (string, error) {
 	return logs, nil
 }
 
-func (c *Client) GetLatestReasonAndMessage(ctx context.Context, incidentID string) (string, string, error) {
-	if exists, err := c.IncidentExists(ctx, incidentID); err != nil {
-		return "", "", fmt.Errorf("error checking for existence of incident with ID: %s. Error: %w", incidentID, err)
-	} else if !exists {
-		return "", "", fmt.Errorf("trying to fetch reason, message for non-existent incident with ID: %s", incidentID)
-	}
-
-	event, err := c.GetLatestEventForIncident(ctx, incidentID)
-	if err != nil {
-		return "", "", err
-	} else if event != nil {
-		return event.Reason, event.Message, nil
-	}
-
-	return "", "", nil
-}
-
 func (c *Client) GetActiveIncident(ctx context.Context, releaseName, namespace string) (string, error) {
 	key := fmt.Sprintf("active_incident:%s:%s", releaseName, namespace)
 
