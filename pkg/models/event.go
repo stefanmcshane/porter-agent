@@ -22,6 +22,7 @@ type ContainerEvent struct {
 
 type PodEvent struct {
 	EventID         string                     `json:"event_id"`
+	ChartName       string                     `json:"-"`
 	PodName         string                     `json:"pod_name"`
 	Namespace       string                     `json:"namespace"`
 	Cluster         string                     `json:"cluster"`

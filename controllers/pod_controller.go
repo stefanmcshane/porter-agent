@@ -32,6 +32,7 @@ import (
 	"github.com/porter-dev/porter-agent/pkg/utils"
 	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -40,6 +41,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var (
@@ -127,7 +129,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	ownerName, ownerKind := r.getOwnerDetails(ctx, req, instance)
+	ownerName, ownerKind, chartName := r.getOwnerDetails(ctx, req, instance)
 
 	customFinalizer := "porter.run/agent-finalizer"
 
@@ -289,6 +291,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	r.logger.Info("active incident ID", "incidentID", incidentID)
 
 	event := &models.PodEvent{
+		ChartName:       chartName,
 		PodName:         instance.Name,
 		Namespace:       instance.Namespace,
 		OwnerName:       ownerName,
@@ -595,12 +598,13 @@ func (r *PodReconciler) fetchReplicaSetOwner(ctx context.Context, req ctrl.Reque
 	return &owner, nil
 }
 
-func (r *PodReconciler) getOwnerDetails(ctx context.Context, req ctrl.Request, pod *corev1.Pod) (string, string) {
+// returns the owner name, kind, chart name
+func (r *PodReconciler) getOwnerDetails(ctx context.Context, req ctrl.Request, pod *corev1.Pod) (string, string, string) {
 	owners := pod.ObjectMeta.OwnerReferences
 
 	if len(owners) == 0 {
 		r.logger.Info("no owners defined for the pod")
-		return "", ""
+		return "", "", ""
 	}
 
 	// in case of multiple owners, take the first
@@ -608,6 +612,7 @@ func (r *PodReconciler) getOwnerDetails(ctx context.Context, req ctrl.Request, p
 	var err error
 
 	owner = &owners[0]
+	chartName := ""
 
 	if owner.Kind == "ReplicaSet" {
 		r.logger.Info("fetching owner for replicaset")
@@ -621,11 +626,42 @@ func (r *PodReconciler) getOwnerDetails(ctx context.Context, req ctrl.Request, p
 		if err != nil {
 			r.logger.Error(err, "cannot fetch owner for replicaset")
 
-			return "", ""
+			return "", "", ""
 		}
 	}
 
-	return pod.Labels["app.kubernetes.io/instance"], owner.Kind
+	chartName = r.getOwnerChartName(ctx, ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      owner.Name,
+			Namespace: req.Namespace,
+		},
+	}, owner.Kind == "Job")
+
+	return pod.Labels["app.kubernetes.io/instance"], owner.Kind, chartName
+}
+
+func (r *PodReconciler) getOwnerChartName(ctx context.Context, req reconcile.Request, isJob bool) string {
+	if isJob {
+		job := &batchv1.Job{}
+
+		err := r.Client.Get(ctx, req.NamespacedName, job)
+		if err != nil {
+			r.logger.Error(err, "cannot fetch job object")
+			return ""
+		}
+
+		return job.Labels["helm.sh/chart"]
+	}
+
+	depl := &appsv1.Deployment{}
+
+	err := r.Client.Get(ctx, req.NamespacedName, depl)
+	if err != nil {
+		r.logger.Error(err, "cannot fetch deployment object")
+		return ""
+	}
+
+	return depl.Labels["helm.sh/chart"]
 }
 
 // SetupWithManager sets up the controller with the Manager.

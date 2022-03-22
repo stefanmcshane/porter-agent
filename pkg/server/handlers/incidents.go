@@ -65,6 +65,7 @@ func GetAllIncidents(c *gin.Context) {
 			return
 		}
 
+		incident.ChartName = latestEvent.ChartName
 		incident.UpdatedAt = latestEvent.Timestamp
 		incident.LatestReason = latestEvent.Reason
 		incident.LatestMessage = latestEvent.Message
@@ -136,6 +137,7 @@ func GetIncidentsByReleaseNamespace(c *gin.Context) {
 			return
 		}
 
+		incident.ChartName = latestEvent.ChartName
 		incident.UpdatedAt = latestEvent.Timestamp
 		incident.LatestReason = latestEvent.Reason
 		incident.LatestMessage = latestEvent.Message
@@ -217,6 +219,7 @@ func GetIncidentEventsByID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"incident_id":    incidentID,
 		"release_name":   strings.Split(incidentID, ":")[1],
+		"chart_name":     latestEvent.ChartName,
 		"created_at":     incidentObj.GetTimestamp(),
 		"updated_at":     latestEvent.Timestamp,
 		"latest_state":   latestState,
