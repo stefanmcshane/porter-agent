@@ -110,24 +110,28 @@ func (e *EventConsumer) Start() {
 				e.consumerLog.Error(err, "error sending HTTP request to porter server for new incident", "payload", payload)
 
 				// requeue the object into the work queue
-				err := e.redisClient.RequeueItemWithScore(e.context, value, score)
-				if err != nil {
-					// log error and continue
-					e.consumerLog.Error(err, "error requeuing item in store with score", "payload", payload)
-					continue
+				if !strings.Contains(err.Error(), "non-existent incident") {
+					err := e.redisClient.RequeueItemWithScore(e.context, value, score)
+					if err != nil {
+						// log error and continue
+						e.consumerLog.Error(err, "error requeuing item in store with score", "payload", payload)
+						continue
+					}
 				}
 			}
 		} else {
-			if err = e.doHTTPPostNotifyResolved(payload); err != nil {
+			if err = e.doHTTPPostNotifyResolved(incidentID); err != nil {
 				// log error
 				e.consumerLog.Error(err, "error sending HTTP request to porter server for resolved incident", "payload", payload)
 
-				// requeue the object into the work queue
-				err := e.redisClient.RequeueItemWithScore(e.context, value, score)
-				if err != nil {
-					// log error and continue
-					e.consumerLog.Error(err, "error requeuing item in store with score", "payload", payload)
-					continue
+				if !strings.Contains(err.Error(), "non-existent incident") {
+					// requeue the object into the work queue
+					err := e.redisClient.RequeueItemWithScore(e.context, value, score)
+					if err != nil {
+						// log error and continue
+						e.consumerLog.Error(err, "error requeuing item in store with score", "payload", payload)
+						continue
+					}
 				}
 			}
 		}

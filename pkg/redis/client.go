@@ -407,7 +407,7 @@ func (c *Client) AddEventToIncident(ctx context.Context, incidentID string, even
 		}
 
 		// we need to add this new incident to the pending queue so that it gets pushed out as a notification
-		c.AppendToNotifyWorkQueue(ctx, []byte(incidentID))
+		c.AppendToNotifyWorkQueue(ctx, []byte("new:"+incidentID))
 	}
 
 	_, err = c.client.SAdd(ctx, fmt.Sprintf("pods:%s", incidentID), event.PodName).Result()
