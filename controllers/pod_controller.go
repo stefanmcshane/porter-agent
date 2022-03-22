@@ -244,7 +244,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 	}
 
-	if len(containerEvents) == 0 && ownerKind == "Deployment" {
+	if len(containerEvents) == 0 {
 		// check if pod's container is in waiting state, might be another container error
 		for i := len(instance.Status.ContainerStatuses) - 1; i >= 0; i-- {
 			status := instance.Status.ContainerStatuses[i]
