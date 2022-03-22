@@ -23,52 +23,15 @@ func GetAllIncidents(c *gin.Context) {
 	var incidents []*models.Incident
 
 	for _, id := range incidentIDs {
-		incidentObj, err := utils.NewIncidentFromString(id)
+		incident, err := redisClient.GetIncidentDetails(c.Copy(), id)
 		if err != nil {
-			httpLogger.Error(err, "error getting incident object", "incidentID", id)
+			httpLogger.Error(err, "error getting incident details")
 
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "internal server error",
 			})
 			return
 		}
-
-		incident := &models.Incident{
-			ID:          id,
-			ReleaseName: incidentObj.GetReleaseName(),
-			CreatedAt:   incidentObj.GetTimestamp(),
-		}
-
-		resolved, err := redisClient.IsIncidentResolved(c.Copy(), id)
-		if err != nil {
-			httpLogger.Error(err, "error checking if incident is resolved", "incidentID", id)
-
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "internal server error",
-			})
-			return
-		}
-
-		if resolved {
-			incident.LatestState = "RESOLVED"
-		} else {
-			incident.LatestState = "ONGOING"
-		}
-
-		latestEvent, err := redisClient.GetLatestEventForIncident(c.Copy(), id)
-		if err != nil {
-			httpLogger.Error(err, "error fetching latest event", "incidentID", id)
-
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "internal server error",
-			})
-			return
-		}
-
-		incident.ChartName = latestEvent.ChartName
-		incident.UpdatedAt = latestEvent.Timestamp
-		incident.LatestReason = latestEvent.Reason
-		incident.LatestMessage = latestEvent.Message
 
 		incidents = append(incidents, incident)
 	}
@@ -95,52 +58,15 @@ func GetIncidentsByReleaseNamespace(c *gin.Context) {
 	var incidents []*models.Incident
 
 	for _, id := range incidentIDs {
-		incidentObj, err := utils.NewIncidentFromString(id)
+		incident, err := redisClient.GetIncidentDetails(c.Copy(), id)
 		if err != nil {
-			httpLogger.Error(err, "error getting incident object from ID:", id)
+			httpLogger.Error(err, "error getting incident details")
 
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "internal server error",
 			})
 			return
 		}
-
-		incident := &models.Incident{
-			ID:          id,
-			ReleaseName: incidentObj.GetReleaseName(),
-			CreatedAt:   incidentObj.GetTimestamp(),
-		}
-
-		resolved, err := redisClient.IsIncidentResolved(c.Copy(), id)
-		if err != nil {
-			httpLogger.Error(err, "error checking if incident is resolved", "incidentID", id)
-
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "internal server error",
-			})
-			return
-		}
-
-		if resolved {
-			incident.LatestState = "RESOLVED"
-		} else {
-			incident.LatestState = "ONGOING"
-		}
-
-		latestEvent, err := redisClient.GetLatestEventForIncident(c.Copy(), id)
-		if err != nil {
-			httpLogger.Error(err, "error fetching latest event", "incidentID", id)
-
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "internal server error",
-			})
-			return
-		}
-
-		incident.ChartName = latestEvent.ChartName
-		incident.UpdatedAt = latestEvent.Timestamp
-		incident.LatestReason = latestEvent.Reason
-		incident.LatestMessage = latestEvent.Message
 
 		incidents = append(incidents, incident)
 	}

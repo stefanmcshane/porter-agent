@@ -134,61 +134,41 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	customFinalizer := "porter.run/agent-finalizer"
 
 	finalizers := instance.Finalizers
-	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
-		found := false
-		for _, fin := range finalizers {
-			if fin == customFinalizer {
-				found = true
-				break
+	if ownerKind != "Job" {
+		if instance.ObjectMeta.DeletionTimestamp.IsZero() {
+			found := false
+			for _, fin := range finalizers {
+				if fin == customFinalizer {
+					found = true
+					break
+				}
 			}
-		}
 
-		if !found {
-			instance.SetFinalizers(append(finalizers, customFinalizer))
-			if err := r.Update(ctx, instance); err != nil {
-				return ctrl.Result{Requeue: true}, fmt.Errorf("error adding custom finalizer: %w", err)
+			if !found {
+				instance.SetFinalizers(append(finalizers, customFinalizer))
+				if err := r.Update(ctx, instance); err != nil {
+					return ctrl.Result{Requeue: true}, fmt.Errorf("error adding custom finalizer: %w", err)
+				}
 			}
-		}
-	} else {
-		found := false
-		for _, fin := range finalizers {
-			if fin == customFinalizer {
-				found = true
-				break
+		} else {
+			found := false
+			for _, fin := range finalizers {
+				if fin == customFinalizer {
+					found = true
+					break
+				}
 			}
-		}
 
-		if found {
-			incidentID, err := r.redisClient.GetActiveIncident(ctx, ownerName, instance.Namespace)
-			if err == nil {
-				r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
+			if found {
+				incidentID, err := r.redisClient.GetActiveIncident(ctx, ownerName, instance.Namespace)
+				if err == nil {
+					r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
+				}
 			}
-		}
 
-		return ctrl.Result{}, nil
+			return ctrl.Result{}, nil
+		}
 	}
-
-	// check latest condition by sorting
-	// r.logger.Info("pod conditions before sorting", "conditions", instance.Status.Conditions)
-	utils.PodConditionsSorter(instance.Status.Conditions, true)
-	// r.logger.Info("pod conditions after sorting", "conditions", instance.Status.Conditions)
-
-	// in case status conditions are not yet set for the pod
-	// reconcile the event
-	if len(instance.Status.Conditions) == 0 {
-		r.logger.Info("empty status conditions....reconciling")
-		return ctrl.Result{Requeue: true}, nil
-	}
-
-	// latestCondition := instance.Status.Conditions[0]
-
-	if len(instance.Status.ContainerStatuses) == 0 {
-		r.logger.Info("nothing in container statuses, reconciling")
-		return ctrl.Result{Requeue: true}, nil
-	}
-
-	// else we still have the object
-	// we can log the current condition
 
 	reason := string(instance.Status.Phase)
 	if instance.Status.Reason != "" {
@@ -251,7 +231,19 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		for i := len(instance.Status.ContainerStatuses) - 1; i >= 0; i-- {
 			status := instance.Status.ContainerStatuses[i]
 
-			if status.State.Waiting != nil && status.State.Waiting.Reason != "" {
+			if ownerKind == "Job" && status.Name != "sidecar" && status.State.Terminated != nil {
+				reason = getFilteredReason(status.State.Terminated.Reason)
+
+				if !strings.HasPrefix(reason, "Kubernetes error:") {
+					// only consider it as an error if it is in our monitoring list of reasons
+					containerEvents[status.Name] = &models.ContainerEvent{
+						Name:    status.Name,
+						Reason:  reason,
+						Message: status.State.Terminated.Message,
+						LogID:   "NOOP", // FIXME: we should be able to get the logs for this one
+					}
+				}
+			} else if ownerKind != "Job" && status.State.Waiting != nil && status.State.Waiting.Reason != "" {
 				reason = getFilteredReason(status.State.Waiting.Reason)
 
 				if !strings.HasPrefix(reason, "Kubernetes error:") {

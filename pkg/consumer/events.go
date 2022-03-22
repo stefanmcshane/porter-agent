@@ -135,9 +135,13 @@ func (e *EventConsumer) Start() {
 }
 
 func (e *EventConsumer) doHTTPPostNotifyNew(incidentID string) error {
-	_, err := e.httpClient.Post(fmt.Sprintf("/api/projects/%s/clusters/%s/incidents/notify_new", projectID, clusterID), map[string]string{
-		"incident_id": incidentID,
-	})
+	incident, err := e.redisClient.GetIncidentDetails(e.context, incidentID)
+	if err != nil {
+		e.consumerLog.Error(err, "error sending http request for new incident")
+		return err
+	}
+
+	_, err = e.httpClient.Post(fmt.Sprintf("/api/projects/%s/clusters/%s/incidents/notify_new", projectID, clusterID), incident)
 
 	if err != nil {
 		// log and return error
@@ -149,9 +153,13 @@ func (e *EventConsumer) doHTTPPostNotifyNew(incidentID string) error {
 }
 
 func (e *EventConsumer) doHTTPPostNotifyResolved(incidentID string) error {
-	_, err := e.httpClient.Post(fmt.Sprintf("/api/projects/%s/clusters/%s/incidents/notify_resolved", projectID, clusterID), map[string]string{
-		"incident_id": incidentID,
-	})
+	incident, err := e.redisClient.GetIncidentDetails(e.context, incidentID)
+	if err != nil {
+		e.consumerLog.Error(err, "error sending http request for new incident")
+		return err
+	}
+
+	_, err = e.httpClient.Post(fmt.Sprintf("/api/projects/%s/clusters/%s/incidents/notify_resolved", projectID, clusterID), incident)
 
 	if err != nil {
 		// log and return error

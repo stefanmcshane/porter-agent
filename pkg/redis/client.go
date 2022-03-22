@@ -483,7 +483,60 @@ func (c *Client) SetJobIncidentResolved(ctx context.Context, incidentID string) 
 		return fmt.Errorf("error trying to remove %s from active_incident. Error: %w", incidentID, err)
 	}
 
+	err = c.AppendToNotifyWorkQueue(ctx, []byte("resolved:"+incidentID))
+	if err != nil {
+		return fmt.Errorf("error adding resolved incident to work queue with ID: %s. Error: %w", incidentID, err)
+	}
+
 	return nil
+}
+
+func (c *Client) GetIncidentDetails(ctx context.Context, incidentID string) (*models.Incident, error) {
+	if exists, err := c.IncidentExists(ctx, incidentID); err != nil {
+		return nil, err
+	} else if !exists {
+		return nil, fmt.Errorf("trying to get details of non-existent incident with ID: %s", incidentID)
+	}
+
+	incidentObj, err := utils.NewIncidentFromString(incidentID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting incident object for incident ID: %s. Error: %w", incidentID, err)
+	}
+
+	incident := &models.Incident{
+		ID:          incidentID,
+		ReleaseName: incidentObj.GetReleaseName(),
+		CreatedAt:   incidentObj.GetTimestamp(),
+	}
+
+	resolved, err := c.IsIncidentResolved(ctx, incidentID)
+	if err != nil {
+		return nil, fmt.Errorf("error checking if incident is resolved with incidentID: %s. Error: %w", incidentID, err)
+	}
+
+	if resolved {
+		incident.LatestState = "RESOLVED"
+	} else {
+		incident.LatestState = "ONGOING"
+	}
+
+	latestEvent, err := c.GetLatestEventForIncident(ctx, incidentID)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching latest event with incidentID: %s. Error: %w", incidentID, err)
+	}
+
+	incident.ChartName = latestEvent.ChartName
+	incident.UpdatedAt = latestEvent.Timestamp
+
+	if incident.LatestState == "RESOLVED" {
+		incident.LatestReason = "Resolved"
+		incident.LatestMessage = "This incident has been resolved"
+	} else {
+		incident.LatestReason = latestEvent.Reason
+		incident.LatestMessage = latestEvent.Message
+	}
+
+	return incident, nil
 }
 
 func (c *Client) IsIncidentResolved(ctx context.Context, incidentID string) (bool, error) {
