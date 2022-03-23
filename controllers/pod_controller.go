@@ -1,19 +1,3 @@
-/*
-Copyright 2021.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package controllers
 
 import (
@@ -27,7 +11,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/porter-dev/porter-agent/pkg/models"
-	"github.com/porter-dev/porter-agent/pkg/processor"
 	"github.com/porter-dev/porter-agent/pkg/redis"
 	"github.com/porter-dev/porter-agent/pkg/utils"
 	"github.com/spf13/viper"
@@ -77,8 +60,7 @@ func init() {
 // PodReconciler reconciles a Pod object
 type PodReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	Processor processor.Interface
+	Scheme *runtime.Scheme
 
 	redisClient *redis.Client
 	KubeClient  *kubernetes.Clientset

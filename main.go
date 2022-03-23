@@ -1,19 +1,3 @@
-/*
-Copyright 2021.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package main
 
 import (
@@ -40,9 +24,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/porter-dev/porter-agent/controllers"
 	"github.com/porter-dev/porter-agent/pkg/consumer"
-	"github.com/porter-dev/porter-agent/pkg/processor"
 	"github.com/porter-dev/porter-agent/pkg/server/routes"
-	"github.com/spf13/viper"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -52,22 +34,9 @@ var (
 	eventConsumer *consumer.EventConsumer
 
 	httpServer *gin.Engine
-
-	redisHost    string
-	redisPort    string
-	maxTailLines int64
 )
 
 func init() {
-	viper.SetDefault("REDIS_HOST", "porter-redis-master")
-	viper.SetDefault("REDIS_PORT", "6379")
-	viper.SetDefault("MAX_TAIL_LINES", int64(100))
-	viper.AutomaticEnv()
-
-	redisHost = viper.GetString("REDIS_HOST")
-	redisPort = viper.GetString("REDIS_PORT")
-	maxTailLines = viper.GetInt64("MAX_TAIL_LINES")
-
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	//+kubebuilder:scaffold:scheme
@@ -132,11 +101,9 @@ func main() {
 	}
 
 	if err = (&controllers.PodReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		// RedisClient: redis.NewClient(redisHost, redisPort, "", "", redis.PODSTORE, maxTailLines),
+		Client:     mgr.GetClient(),
+		Scheme:     mgr.GetScheme(),
 		KubeClient: kubernetes.NewForConfigOrDie(mgr.GetConfig()),
-		Processor:  processor.NewPodEventProcessor(mgr.GetConfig()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pod")
 		os.Exit(1)
@@ -156,8 +123,8 @@ func main() {
 	setupLog.Info("creating event consumer")
 	eventConsumer = consumer.NewEventConsumer(50, time.Millisecond, context.TODO())
 
-	// setupLog.Info("starting event consumer")
-	// go eventConsumer.Start()
+	setupLog.Info("starting event consumer")
+	go eventConsumer.Start()
 
 	setupLog.Info("starting HTTP server")
 	httpServer = routes.NewRouter()
