@@ -176,13 +176,11 @@ func (c *Client) IncidentExists(ctx context.Context, incident string) (bool, err
 		return false, fmt.Errorf("error checking if incident with ID: %s exists. Error: %w", incident, err)
 	}
 
-	if val == 1 {
-		return true, nil
-	} else if val > 1 {
-		panic(fmt.Sprintf("more than one incident with key %s exists in Redis", incident))
+	if val == 0 {
+		return false, nil
 	}
 
-	return false, nil
+	return true, nil
 }
 
 func (c *Client) GetLatestEventForIncident(ctx context.Context, incidentID string) (*models.PodEvent, error) {
@@ -266,9 +264,6 @@ func (c *Client) AddEventToIncident(ctx context.Context, incidentID string, even
 		if err != nil {
 			return fmt.Errorf("error setting expiration to incident with ID: %s. Error: %w", incidentID, err)
 		}
-
-		// we need to add this new incident to the pending queue so that it gets pushed out as a notification
-		c.AppendToNotifyWorkQueue(ctx, []byte("new:"+incidentID))
 	}
 
 	_, err = c.client.SAdd(ctx, fmt.Sprintf("pods:%s", incidentID), event.PodName).Result()
@@ -283,6 +278,9 @@ func (c *Client) AddEventToIncident(ctx context.Context, incidentID string, even
 		if err != nil {
 			return fmt.Errorf("error setting expiration for pod set for incident ID: %s. Error: %w", incidentID, err)
 		}
+
+		// we need to add this new incident to the pending queue so that it gets pushed out as a notification
+		c.AppendToNotifyWorkQueue(ctx, []byte("new:"+incidentID))
 	}
 
 	return nil
@@ -309,7 +307,12 @@ func (c *Client) SetPodResolved(ctx context.Context, podName, incidentID string)
 
 		incidentObj, _ := utils.NewIncidentFromString(incidentID)
 
-		_, err := c.client.Del(ctx, fmt.Sprintf("active_incident:%s:%s", incidentObj.GetReleaseName(),
+		_, err = c.client.Del(ctx, key).Result()
+		if err != nil {
+			return fmt.Errorf("error trying to remove pods for resolved incident ID: %s. Error: %w", incidentID, err)
+		}
+
+		_, err = c.client.Del(ctx, fmt.Sprintf("active_incident:%s:%s", incidentObj.GetReleaseName(),
 			incidentObj.GetNamespace())).Result()
 		if err != nil {
 			return fmt.Errorf("error trying to remove %s from active_incident. Error: %w", incidentID, err)

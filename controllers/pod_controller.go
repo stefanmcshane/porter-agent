@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"regexp"
 	"strings"
 	"time"
 
@@ -165,10 +164,10 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		containerReason := ""
 
 		if status.State.Waiting != nil && status.State.Waiting.Reason != "" {
-			reason := getFilteredReason(status.State.Waiting.Reason)
+			reason := utils.GetFilteredReason(status.State.Waiting.Reason)
 			containerReason = reason
 		} else if status.State.Terminated != nil && status.State.Terminated.Reason != "" {
-			reason = getFilteredReason(status.State.Terminated.Reason)
+			reason = utils.GetFilteredReason(status.State.Terminated.Reason)
 			containerReason = reason
 		} else if status.State.Terminated != nil && status.State.Terminated.Reason == "" {
 			if status.State.Terminated.Signal != 0 {
@@ -214,7 +213,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 			status := instance.Status.ContainerStatuses[i]
 
 			if ownerKind == "Job" && status.Name != "sidecar" && status.State.Terminated != nil {
-				reason = getFilteredReason(status.State.Terminated.Reason)
+				reason = utils.GetFilteredReason(status.State.Terminated.Reason)
 
 				if !strings.HasPrefix(reason, "Kubernetes error:") {
 					// only consider it as an error if it is in our monitoring list of reasons
@@ -226,7 +225,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 					}
 				}
 			} else if ownerKind != "Job" && status.State.Waiting != nil && status.State.Waiting.Reason != "" {
-				reason = getFilteredReason(status.State.Waiting.Reason)
+				reason = utils.GetFilteredReason(status.State.Waiting.Reason)
 
 				if !strings.HasPrefix(reason, "Kubernetes error:") {
 					// only consider it as an error if it is in our monitoring list of reasons
@@ -244,11 +243,11 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	if len(containerEvents) == 0 {
 		incidentID, err := r.redisClient.GetActiveIncident(ctx, ownerName, instance.Namespace)
 		if err == nil {
-			r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
-
 			if ownerKind == "Job" {
 				// since a job has one running pod at a time and here we know that it has run successfully
 				r.redisClient.SetJobIncidentResolved(ctx, incidentID) // FIXME: make use of the error
+			} else {
+				r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
 			}
 		}
 
@@ -411,10 +410,10 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 	}
 
-	event.Message = getFilteredMessage(event.Message)
+	event.Message = utils.GetFilteredMessage(event.Message)
 
 	for _, containerEvent := range event.ContainerEvents {
-		containerEvent.Message = getFilteredMessage(containerEvent.Message)
+		containerEvent.Message = utils.GetFilteredMessage(containerEvent.Message)
 	}
 
 	r.logger.Info("adding event to incident")
@@ -428,50 +427,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func getFilteredMessage(message string) string {
-	regex := regexp.MustCompile("failed to start container \".*?\"")
-	matches := regex.FindStringSubmatch(message)
-
-	filteredMsg := ""
-
-	if len(matches) > 0 {
-		containerName := strings.Split(matches[0], "\"")[1]
-		filteredMsg = "In container \"" + containerName + "\": "
-	}
-
-	regex = regexp.MustCompile("starting container process caused:.*$")
-	matches = regex.FindStringSubmatch(message)
-
-	if len(matches) > 0 {
-		filteredMsg += strings.TrimPrefix(matches[0], "starting container process caused: ")
-	}
-
-	if filteredMsg == "" {
-		return message
-	}
-
-	return filteredMsg
-}
-
-func getFilteredReason(reason string) string {
-	// refer: https://stackoverflow.com/a/57886025
-	if reason == "CrashLoopBackOff" {
-		return "Container is in a crash loop"
-	} else if reason == "ImagePullBackOff" || reason == "ErrImagePull" {
-		return "Error while pulling image from container registry"
-	} else if reason == "OOMKilled" {
-		return "Out-of-memory, resources exhausted"
-	} else if reason == "Error" {
-		return "Internal error"
-	} else if reason == "ContainerCannotRun" {
-		return "Container is unable to run due to internal error"
-	} else if reason == "DeadlineExceeded" {
-		return "Operation not completed in given timeframe"
-	}
-
-	return "Kubernetes error: " + reason
 }
 
 func (r *PodReconciler) getReasonAndMessage(instance *corev1.Pod, ownerType string) (string, string) {

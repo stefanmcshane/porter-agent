@@ -139,6 +139,8 @@ func (e *EventConsumer) Start() {
 }
 
 func (e *EventConsumer) doHTTPPostNotifyNew(incidentID string) error {
+	e.consumerLog.Info("notify new", "incidentID", incidentID)
+
 	incident, err := e.redisClient.GetIncidentDetails(e.context, incidentID)
 	if err != nil {
 		e.consumerLog.Error(err, "error sending http request for new incident")
@@ -157,6 +159,8 @@ func (e *EventConsumer) doHTTPPostNotifyNew(incidentID string) error {
 }
 
 func (e *EventConsumer) doHTTPPostNotifyResolved(incidentID string) error {
+	e.consumerLog.Info("notify resolved", "incidentID", incidentID)
+
 	incident, err := e.redisClient.GetIncidentDetails(e.context, incidentID)
 	if err != nil {
 		e.consumerLog.Error(err, "error sending http request for new incident")
