@@ -19,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	intstrutil "k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -111,6 +112,19 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	ownerName, ownerKind, chartName := r.getOwnerDetails(ctx, req, instance)
+
+	if ownerKind == "Deployment" {
+		ignore, _ := r.canIgnoreMultipodDeployment(ctx, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      ownerName,
+				Namespace: req.Namespace,
+			},
+		})
+
+		if ignore {
+			return ctrl.Result{}, nil
+		}
+	}
 
 	customFinalizer := "porter.run/agent-finalizer"
 
@@ -583,6 +597,41 @@ func (r *PodReconciler) getOwnerChartName(ctx context.Context, req reconcile.Req
 	}
 
 	return depl.Labels["helm.sh/chart"]
+}
+
+func getMaxUnavailable(deployment *appsv1.Deployment) int32 {
+	if deployment.Spec.Strategy.Type != appsv1.RollingUpdateDeploymentStrategyType || *(deployment.Spec.Replicas) == 0 {
+		return int32(0)
+	}
+
+	desired := *(deployment.Spec.Replicas)
+	maxUnavailable := deployment.Spec.Strategy.RollingUpdate.MaxUnavailable
+
+	unavailable, err := intstrutil.GetScaledValueFromIntOrPercent(intstrutil.ValueOrDefault(maxUnavailable, intstrutil.FromInt(0)), int(desired), false)
+
+	if err != nil {
+		return 0
+	}
+
+	return int32(unavailable)
+}
+
+func (r *PodReconciler) canIgnoreMultipodDeployment(ctx context.Context, req reconcile.Request) (bool, error) {
+	depl := &appsv1.Deployment{}
+
+	err := r.Client.Get(ctx, req.NamespacedName, depl)
+	if err != nil {
+		r.logger.Error(err, "cannot fetch deployment object")
+		return false, err
+	}
+
+	minUnavailable := *(depl.Spec.Replicas) - getMaxUnavailable(depl)
+
+	if minUnavailable <= depl.Status.ReadyReplicas {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
