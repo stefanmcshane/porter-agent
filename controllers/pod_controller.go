@@ -627,7 +627,7 @@ func (r *PodReconciler) canIgnoreMultipodDeployment(ctx context.Context, req rec
 
 	minUnavailable := *(depl.Spec.Replicas) - getMaxUnavailable(depl)
 
-	if minUnavailable <= depl.Status.ReadyReplicas {
+	if minUnavailable > depl.Status.ReadyReplicas {
 		return true, nil
 	}
 
