@@ -216,13 +216,7 @@ func (c *Client) GetLatestEventForIncident(ctx context.Context, incidentID strin
 	return event, nil
 }
 
-func (c *Client) AddEventToIncident(ctx context.Context, incidentID string, event *models.PodEvent) error {
-	// first check if incident is already in Redis
-	newIncident, err := c.IncidentExists(ctx, incidentID)
-	if err != nil {
-		return err
-	}
-
+func (c *Client) AddEventToIncident(ctx context.Context, incidentID string, event *models.PodEvent, newIncident bool) error {
 	if !newIncident {
 		events, err := c.client.ZRange(ctx, incidentID, 0, -1).Result()
 		if err != nil {
@@ -597,34 +591,32 @@ func (c *Client) GetActiveIncident(ctx context.Context, releaseName, namespace s
 	return incidentID, nil
 }
 
-func (c *Client) GetOrCreateActiveIncident(ctx context.Context, releaseName, namespace string) (string, bool, error) {
+func (c *Client) ActiveIncidentExists(ctx context.Context, releaseName, namespace string) (bool, error) {
 	key := fmt.Sprintf("active_incident:%s:%s", releaseName, namespace)
 
 	exists, err := c.client.Exists(ctx, key).Result()
 	if err != nil {
-		return "", false, fmt.Errorf("error checking for active incident for %s in namespace %s. Error: %w",
+		return false, fmt.Errorf("error checking for active incident for release: %s, namespace: %s. Error: %w",
 			releaseName, namespace, err)
 	}
 
 	if exists == 0 {
-		// create a new active incident key
-		newIncident := utils.NewIncident(releaseName, namespace, time.Now().Unix())
-
-		_, err := c.client.Set(ctx, key, newIncident.ToString(), time.Hour*24*14).Result()
-		if err != nil {
-			return "", false, fmt.Errorf("error creating new active incident for release %s with namespace %s. Error: %w",
-				releaseName, namespace, err)
-		}
-
-		return newIncident.ToString(), true, nil
-	} else if exists == 1 {
-		incidentID, err := c.GetActiveIncident(ctx, releaseName, namespace)
-		if err != nil {
-			return "", false, err
-		}
-
-		return incidentID, false, nil
+		return false, nil
 	}
 
-	return "", false, fmt.Errorf("error fetching active incident for %s in namespace %s", releaseName, namespace)
+	return true, nil
+}
+
+func (c *Client) CreateActiveIncident(ctx context.Context, releaseName, namespace string) (string, error) {
+	key := fmt.Sprintf("active_incident:%s:%s", releaseName, namespace)
+
+	newIncident := utils.NewIncident(releaseName, namespace, time.Now().Unix())
+
+	_, err := c.client.Set(ctx, key, newIncident.ToString(), time.Hour*24*14).Result()
+	if err != nil {
+		return "", fmt.Errorf("error creating new active incident for release %s with namespace %s. Error: %w",
+			releaseName, namespace, err)
+	}
+
+	return newIncident.ToString(), nil
 }

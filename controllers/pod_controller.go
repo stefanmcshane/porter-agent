@@ -270,9 +270,26 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	r.logger.Info("container events created.", "length", len(containerEvents))
 
-	incidentID, _, err := r.redisClient.GetOrCreateActiveIncident(ctx, ownerName, instance.Namespace)
+	newIncident := false
+	incidentID := ""
+
+	exists, err := r.redisClient.ActiveIncidentExists(ctx, ownerName, instance.Namespace)
 	if err != nil {
 		return ctrl.Result{Requeue: true}, err
+	}
+
+	if exists {
+		incidentID, err = r.redisClient.GetActiveIncident(ctx, ownerName, instance.Namespace)
+		if err != nil {
+			return ctrl.Result{Requeue: true}, err
+		}
+	} else {
+		incidentID, err = r.redisClient.CreateActiveIncident(ctx, ownerName, instance.Namespace)
+		if err != nil {
+			return ctrl.Result{Requeue: true}, err
+		}
+
+		newIncident = true
 	}
 
 	r.logger.Info("active incident ID", "incidentID", incidentID)
@@ -431,7 +448,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	r.logger.Info("adding event to incident")
-	err = r.redisClient.AddEventToIncident(ctx, incidentID, event)
+	err = r.redisClient.AddEventToIncident(ctx, incidentID, event, newIncident)
 	if err != nil && strings.Contains(err.Error(), "max event count") {
 		r.logger.Error(err, "max events reached for incident")
 		return ctrl.Result{}, nil
