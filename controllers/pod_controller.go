@@ -64,6 +64,7 @@ type PodReconciler struct {
 
 	redisClient *redis.Client
 	KubeClient  *kubernetes.Clientset
+	PodFilter   utils.PodFilter
 
 	logger logr.Logger
 }
@@ -111,7 +112,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	ownerName, ownerKind, chartName := r.getOwnerDetails(ctx, req, instance)
+	porterReleaseName, ownerName, ownerKind, chartName := r.getOwnerDetails(ctx, req, instance)
 
 	if ownerKind == "Deployment" {
 		ignore, _ := r.canIgnoreMultipodDeployment(ctx, reconcile.Request{
@@ -155,9 +156,22 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 			}
 
 			if found {
-				incidentID, err := r.redisClient.GetActiveIncident(ctx, ownerName, instance.Namespace)
+				incidentID, err := r.redisClient.GetActiveIncident(ctx, porterReleaseName, instance.Namespace)
 				if err == nil {
 					r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
+				}
+
+				// remove the finalizer
+				var updatedFinalizers []string
+				for _, fin := range finalizers {
+					if fin != customFinalizer {
+						updatedFinalizers = append(updatedFinalizers, fin)
+					}
+				}
+
+				instance.SetFinalizers(updatedFinalizers)
+				if err = r.Update(ctx, instance); err != nil {
+					return ctrl.Result{Requeue: true}, fmt.Errorf("error removing custom finalizer: %w", err)
 				}
 			}
 
@@ -165,97 +179,12 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 	}
 
-	reason := string(instance.Status.Phase)
-	if instance.Status.Reason != "" {
-		reason = instance.Status.Reason
-	}
-
 	r.logger.Info("creating container events")
-	containerEvents := make(map[string]*models.ContainerEvent)
 
-	for i := len(instance.Status.ContainerStatuses) - 1; i >= 0; i-- {
-		status := instance.Status.ContainerStatuses[i]
-		containerReason := ""
+	filteredMsgRes := r.PodFilter.Filter(instance, ownerKind == "Job", r.logger)
 
-		if status.State.Waiting != nil && status.State.Waiting.Reason != "" {
-			reason := utils.GetFilteredReason(status.State.Waiting.Reason)
-			containerReason = reason
-		} else if status.State.Terminated != nil && status.State.Terminated.Reason != "" {
-			reason = utils.GetFilteredReason(status.State.Terminated.Reason)
-			containerReason = reason
-		} else if status.State.Terminated != nil && status.State.Terminated.Reason == "" {
-			if status.State.Terminated.Signal != 0 {
-				reason = fmt.Sprintf("Non-zero signal: %d", status.State.Terminated.Signal)
-			} else {
-				reason = fmt.Sprintf("Non-zero exit code: %d", status.State.Terminated.ExitCode)
-			}
-		}
-
-		if status.LastTerminationState.Terminated != nil {
-			event := &models.ContainerEvent{
-				Name:     status.Name,
-				ExitCode: status.LastTerminationState.Terminated.ExitCode,
-			}
-
-			if containerReason != "" {
-				event.Reason = containerReason
-			}
-
-			if event.Reason == "" {
-				if signal, ok := containerSignals[event.ExitCode]; ok {
-					event.Reason = fmt.Sprintf("Container exited with %s signal. This is most probably a system error.", signal)
-				} else {
-					event.Reason = fmt.Sprintf("Container exited with %d exit code", event.ExitCode)
-
-					if event.ExitCode > 128 {
-						event.Reason = fmt.Sprintf("%s. This is most probably a system error.", event.Reason)
-					} else {
-						event.Reason = fmt.Sprintf("%s. This is most probably an application error.", event.Reason)
-					}
-				}
-			}
-
-			event.Message = status.LastTerminationState.Terminated.Message
-
-			containerEvents[status.Name] = event
-		}
-	}
-
-	if len(containerEvents) == 0 {
-		// check if pod's container is in waiting state, might be another container error
-		for i := len(instance.Status.ContainerStatuses) - 1; i >= 0; i-- {
-			status := instance.Status.ContainerStatuses[i]
-
-			if ownerKind == "Job" && status.Name != "sidecar" && status.State.Terminated != nil {
-				reason = utils.GetFilteredReason(status.State.Terminated.Reason)
-
-				if !strings.HasPrefix(reason, "Kubernetes error:") {
-					// only consider it as an error if it is in our monitoring list of reasons
-					containerEvents[status.Name] = &models.ContainerEvent{
-						Name:    status.Name,
-						Reason:  reason,
-						Message: status.State.Terminated.Message,
-						LogID:   "NOOP", // FIXME: we should be able to get the logs for this one
-					}
-				}
-			} else if ownerKind != "Job" && status.State.Waiting != nil && status.State.Waiting.Reason != "" {
-				reason = utils.GetFilteredReason(status.State.Waiting.Reason)
-
-				if !strings.HasPrefix(reason, "Kubernetes error:") {
-					// only consider it as an error if it is in our monitoring list of reasons
-					containerEvents[status.Name] = &models.ContainerEvent{
-						Name:    status.Name,
-						Reason:  reason,
-						Message: status.State.Waiting.Message,
-						LogID:   "NOOP",
-					}
-				}
-			}
-		}
-	}
-
-	if len(containerEvents) == 0 {
-		incidentID, err := r.redisClient.GetActiveIncident(ctx, ownerName, instance.Namespace)
+	if filteredMsgRes == nil {
+		incidentID, err := r.redisClient.GetActiveIncident(ctx, porterReleaseName, instance.Namespace)
 		if err == nil {
 			if ownerKind == "Job" {
 				// since a job has one running pod at a time and here we know that it has run successfully
@@ -268,23 +197,33 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil // FIXME: better introspection to requeue here
 	}
 
+	containerEvents := make(map[string]*models.ContainerEvent)
+
+	for _, filteredContainerRes := range filteredMsgRes.ContainerStatuses {
+		containerEvents[filteredContainerRes.ContainerName] = &models.ContainerEvent{
+			Name:    filteredContainerRes.ContainerName,
+			Reason:  filteredContainerRes.Summary,
+			Message: filteredContainerRes.Details,
+		}
+	}
+
 	r.logger.Info("container events created.", "length", len(containerEvents))
 
 	newIncident := false
 	incidentID := ""
 
-	exists, err := r.redisClient.ActiveIncidentExists(ctx, ownerName, instance.Namespace)
+	exists, err := r.redisClient.ActiveIncidentExists(ctx, porterReleaseName, instance.Namespace)
 	if err != nil {
 		return ctrl.Result{Requeue: true}, err
 	}
 
 	if exists {
-		incidentID, err = r.redisClient.GetActiveIncident(ctx, ownerName, instance.Namespace)
+		incidentID, err = r.redisClient.GetActiveIncident(ctx, porterReleaseName, instance.Namespace)
 		if err != nil {
 			return ctrl.Result{Requeue: true}, err
 		}
 	} else {
-		incidentID, err = r.redisClient.CreateActiveIncident(ctx, ownerName, instance.Namespace)
+		incidentID, err = r.redisClient.CreateActiveIncident(ctx, porterReleaseName, instance.Namespace)
 		if err != nil {
 			return ctrl.Result{Requeue: true}, err
 		}
@@ -298,27 +237,14 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		ChartName:       chartName,
 		PodName:         instance.Name,
 		Namespace:       instance.Namespace,
-		OwnerName:       ownerName,
+		OwnerName:       porterReleaseName,
 		OwnerType:       ownerKind,
 		Timestamp:       time.Now().Unix(),
 		Phase:           string(instance.Status.Phase),
 		ContainerEvents: containerEvents,
-		Reason:          reason,
+		Reason:          filteredMsgRes.PodSummary,
+		Message:         filteredMsgRes.PodDetails,
 	}
-
-	event.Status = fmt.Sprintf("Type: %s, Status: %s", instance.Status.Conditions[0].Type,
-		instance.Status.Conditions[0].Status)
-	_, event.Message = r.getReasonAndMessage(instance, event.OwnerType)
-
-	// if event.Reason == "" {
-	// 	// FIXME: do better
-	// 	event.Reason = "The pod terminated due to an error"
-	// }
-
-	// if event.Message == "" {
-	// 	// FIXME: do better
-	// 	event.Message = "We were unable to find the exact issue with the pod. We recommend you to check individual errors in the pod."
-	// }
 
 	r.logger.Info("checking for incident existence")
 	if exists, err := r.redisClient.IncidentExists(ctx, incidentID); err != nil {
@@ -380,14 +306,9 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	r.logger.Info("fetching logs for containers")
 	for containerName, containerEvent := range event.ContainerEvents {
-		if containerEvent.LogID == "NOOP" {
-			containerEvent.LogID = ""
-			continue
-		}
-
 		logOptions := &corev1.PodLogOptions{
 			TailLines: &maxTailLines,
-			Previous:  true,
+			Previous:  r.hasLastTerminatedState(instance, containerName),
 			Container: containerName,
 		}
 
@@ -441,12 +362,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 	}
 
-	event.Message = utils.GetFilteredMessage(event.Message)
-
-	for _, containerEvent := range event.ContainerEvents {
-		containerEvent.Message = utils.GetFilteredMessage(containerEvent.Message)
-	}
-
 	r.logger.Info("adding event to incident")
 	err = r.redisClient.AddEventToIncident(ctx, incidentID, event, newIncident)
 	if err != nil && strings.Contains(err.Error(), "max event count") {
@@ -460,74 +375,17 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	return ctrl.Result{}, nil
 }
 
-func (r *PodReconciler) getReasonAndMessage(instance *corev1.Pod, ownerType string) (string, string) {
-	// since list is already sorted in place now, hence the first condition
-	// is the latest, get its reason and message
-
-	if len(instance.Spec.Containers) > 1 {
-		latest := instance.Status.Conditions[0]
-		r.logger.Info("multicontainer scenario", "latest", latest)
-
-		// if pod is owned by a job, check in all containers
-		if ownerType == "Job" {
-			r.logger.Info("pod owned by a job. extracting from all container statuses of the pod")
-			return r.extractMultipleContainerStatuses(instance)
-		}
-
-		// check if a failing container is mentioned in the message
-		container, ok := utils.ExtractErroredContainer(latest.Message)
-		r.logger.Info("extracted errored containers", "container", container, "ok", ok)
-		if ok {
-			r.logger.Info("failing container in message")
-			// extract message and reason from given container
-			return r.extractFromContainerStatuses(container, instance)
-		}
-
-		return r.extractMultipleContainerStatuses(instance)
-	}
-
-	r.logger.Info("extracting details from container statuses")
-	// since its a single container call with empty container name
-	return r.extractFromContainerStatuses("", instance)
-}
-
-func (r *PodReconciler) extractMultipleContainerStatuses(instance *corev1.Pod) (string, string) {
-	reasons := []string{}
-	messages := []string{}
-
-	for _, container := range instance.Status.ContainerStatuses {
-		reason, message := r.extractFromContainerStatuses(container.Name, instance)
-
-		reasons = append(reasons, fmt.Sprintf("Container: %s, Reason: %s", container.Name, reason))
-		messages = append(messages, fmt.Sprintf("Container: %s, Reason: %s", container.Name, message))
-	}
-
-	return strings.Join(reasons, "\n"), strings.Join(messages, "\n")
-}
-
-func (r *PodReconciler) extractFromContainerStatuses(containerName string, instance *corev1.Pod) (string, string) {
-	var state corev1.ContainerState
-
-	if containerName == "" {
-		// this is from a pod with single container
-		state = instance.Status.ContainerStatuses[0].State
-	} else {
-		for _, status := range instance.Status.ContainerStatuses {
-			if status.Name == containerName {
-				state = status.State
+func (r *PodReconciler) hasLastTerminatedState(pod *corev1.Pod, containerName string) bool {
+	for i := len(pod.Status.ContainerStatuses) - 1; i >= 0; i-- {
+		if containerName == pod.Status.ContainerStatuses[i].Name {
+			if pod.Status.ContainerStatuses[i].LastTerminationState.Waiting != nil ||
+				pod.Status.ContainerStatuses[i].LastTerminationState.Terminated != nil {
+				return true
 			}
 		}
 	}
 
-	if state.Running != nil {
-		return "", fmt.Sprintf("Container started at: %s", state.Running.StartedAt.Format(time.RFC3339))
-	}
-
-	if state.Terminated != nil {
-		return fmt.Sprintf("State: %s, reason: %s", "Terminated", state.Terminated.Reason), state.Terminated.Message
-	}
-
-	return fmt.Sprintf("State: %s, reason: %s", "Waiting", state.Waiting.Reason), state.Waiting.Message
+	return false
 }
 
 func (r *PodReconciler) fetchReplicaSetOwner(ctx context.Context, req ctrl.Request) (*metav1.OwnerReference, error) {
@@ -551,12 +409,12 @@ func (r *PodReconciler) fetchReplicaSetOwner(ctx context.Context, req ctrl.Reque
 }
 
 // returns the owner name, kind, chart name
-func (r *PodReconciler) getOwnerDetails(ctx context.Context, req ctrl.Request, pod *corev1.Pod) (string, string, string) {
+func (r *PodReconciler) getOwnerDetails(ctx context.Context, req ctrl.Request, pod *corev1.Pod) (string, string, string, string) {
 	owners := pod.ObjectMeta.OwnerReferences
 
 	if len(owners) == 0 {
 		r.logger.Info("no owners defined for the pod")
-		return "", "", ""
+		return "", "", "", ""
 	}
 
 	// in case of multiple owners, take the first
@@ -578,7 +436,7 @@ func (r *PodReconciler) getOwnerDetails(ctx context.Context, req ctrl.Request, p
 		if err != nil {
 			r.logger.Error(err, "cannot fetch owner for replicaset")
 
-			return "", "", ""
+			return "", "", "", ""
 		}
 	}
 
@@ -589,7 +447,7 @@ func (r *PodReconciler) getOwnerDetails(ctx context.Context, req ctrl.Request, p
 		},
 	}, owner.Kind == "Job")
 
-	return pod.Labels["app.kubernetes.io/instance"], owner.Kind, chartName
+	return pod.Labels["app.kubernetes.io/instance"], owner.Name, owner.Kind, chartName
 }
 
 func (r *PodReconciler) getOwnerChartName(ctx context.Context, req reconcile.Request, isJob bool) string {

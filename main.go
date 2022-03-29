@@ -25,6 +25,7 @@ import (
 	"github.com/porter-dev/porter-agent/controllers"
 	"github.com/porter-dev/porter-agent/pkg/consumer"
 	"github.com/porter-dev/porter-agent/pkg/server/routes"
+	"github.com/porter-dev/porter-agent/pkg/utils"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -104,6 +105,7 @@ func main() {
 		Client:     mgr.GetClient(),
 		Scheme:     mgr.GetScheme(),
 		KubeClient: kubernetes.NewForConfigOrDie(mgr.GetConfig()),
+		PodFilter:  utils.NewAgentPodFilter(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pod")
 		os.Exit(1)
