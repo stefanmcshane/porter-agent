@@ -104,8 +104,8 @@ func main() {
 	if err = (&controllers.PodReconciler{
 		Client:     mgr.GetClient(),
 		Scheme:     mgr.GetScheme(),
-		KubeClient: kubernetes.NewForConfigOrDie(mgr.GetConfig()),
-		PodFilter:  utils.NewAgentPodFilter(),
+		KubeClient: kubeClient,
+		PodFilter:  utils.NewAgentPodFilter(kubeClient),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pod")
 		os.Exit(1)

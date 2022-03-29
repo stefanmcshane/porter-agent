@@ -1,13 +1,16 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
-	"github.com/go-logr/logr"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 var porterHost string
@@ -25,23 +28,25 @@ type FilteredMessageContainerResult struct {
 }
 
 type PodFilter interface {
-	Filter(*corev1.Pod, bool, logr.Logger) *FilteredMessageResult
+	Filter(*corev1.Pod, bool) *FilteredMessageResult
 }
 
-type AgentPodFilter struct{}
+type AgentPodFilter struct {
+	kubeClient *kubernetes.Clientset
+}
 
 func init() {
 	porterHost = viper.GetString("PORTER_HOST")
 }
 
-func NewAgentPodFilter() PodFilter {
-	return &AgentPodFilter{}
+func NewAgentPodFilter(kubeClient *kubernetes.Clientset) PodFilter {
+	return &AgentPodFilter{
+		kubeClient: kubeClient,
+	}
 }
 
-func (f *AgentPodFilter) Filter(pod *corev1.Pod, isJob bool, log logr.Logger) *FilteredMessageResult {
+func (f *AgentPodFilter) Filter(pod *corev1.Pod, isJob bool) *FilteredMessageResult {
 	res := &FilteredMessageResult{}
-
-	log.Info("filtering for", "pod", pod.Name)
 
 	for i := len(pod.Status.ContainerStatuses) - 1; i >= 0; i-- {
 		if isJob && (pod.Status.ContainerStatuses[i].Name == "sidecar" ||
@@ -56,8 +61,6 @@ func (f *AgentPodFilter) Filter(pod *corev1.Pod, isJob bool, log logr.Logger) *F
 
 		if status.State.Waiting != nil && status.State.Waiting.Reason != "" {
 			if status.State.Waiting.Reason == "CrashLoopBackOff" {
-				log.Info("pod is in CrashLoopBackOff")
-
 				if status.LastTerminationState.Terminated != nil {
 					if status.LastTerminationState.Terminated.Reason == "Error" {
 						containerResult.Summary = fmt.Sprintf("The application exited with exit code %d",
@@ -122,7 +125,28 @@ func (f *AgentPodFilter) Filter(pod *corev1.Pod, isJob bool, log logr.Logger) *F
 		}
 	}
 
-	log.Info("filter result", "result", res)
+	if len(res.ContainerStatuses) == 0 {
+		// check for possible events-based errors like unhealthy liveness probe
+		for _, container := range pod.Status.ContainerStatuses {
+			events, err := f.kubeClient.CoreV1().Events(pod.Namespace).List(
+				context.Background(), v1.ListOptions{
+					FieldSelector: fmt.Sprintf(
+						"involvedObject.name=%s,reason=Killing,involvedObject.fieldPath=spec.containers{%s}",
+						pod.Name, container.Name),
+				},
+			)
+
+			if err == nil && len(events.Items) > 0 {
+				f.sortEventsByCreationTimestamp(events.Items)
+
+				res.ContainerStatuses = append(res.ContainerStatuses, &FilteredMessageContainerResult{
+					ContainerName: container.Name,
+					Summary:       "",
+					Details:       events.Items[0].Message,
+				})
+			}
+		}
+	}
 
 	if len(res.ContainerStatuses) == 0 {
 		return nil
@@ -143,6 +167,12 @@ func (f *AgentPodFilter) Filter(pod *corev1.Pod, isJob bool, log logr.Logger) *F
 	}
 
 	return res
+}
+
+func (f *AgentPodFilter) sortEventsByCreationTimestamp(events []corev1.Event) {
+	sort.SliceStable(events, func(i, j int) bool {
+		return events[i].GetCreationTimestamp().After(events[j].GetCreationTimestamp().Time)
+	})
 }
 
 func getFilteredMessage(message string) string {

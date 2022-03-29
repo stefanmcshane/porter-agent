@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -114,19 +115,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	porterReleaseName, ownerName, ownerKind, chartName := r.getOwnerDetails(ctx, req, instance)
 
-	if ownerKind == "Deployment" {
-		ignore, _ := r.canIgnoreMultipodDeployment(ctx, reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      ownerName,
-				Namespace: req.Namespace,
-			},
-		})
-
-		if ignore {
-			return ctrl.Result{}, nil
-		}
-	}
-
 	customFinalizer := "porter.run/agent-finalizer"
 
 	finalizers := instance.Finalizers
@@ -179,9 +167,43 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 	}
 
+	if ownerKind == "Deployment" {
+		ignore, _ := r.canIgnoreMultipodDeployment(ctx, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      ownerName,
+				Namespace: req.Namespace,
+			},
+		})
+
+		if ignore {
+			r.logger.Info("ignoring multipod deployment", "deployment", ownerName, "pod", instance.Name)
+			// return ctrl.Result{}, nil
+		}
+	} else if ownerKind == "Job" {
+		// we care only for the most recent pod for a job
+		jobPods, err := r.KubeClient.CoreV1().Pods(instance.Namespace).List(
+			ctx, metav1.ListOptions{
+				LabelSelector: fmt.Sprintf("app.kubernetes.io/instance=%s", porterReleaseName),
+			},
+		)
+
+		if err != nil {
+			r.logger.Error(err, "error fetching list of job pods", "job", porterReleaseName, "pod", instance.Name)
+			return ctrl.Result{Requeue: true}, err
+		}
+
+		sort.SliceStable(jobPods.Items, func(i, j int) bool {
+			return jobPods.Items[i].CreationTimestamp.After(jobPods.Items[j].CreationTimestamp.Time)
+		})
+
+		if jobPods.Items[0].Name != instance.Name {
+			return ctrl.Result{}, nil
+		}
+	}
+
 	r.logger.Info("creating container events")
 
-	filteredMsgRes := r.PodFilter.Filter(instance, ownerKind == "Job", r.logger)
+	filteredMsgRes := r.PodFilter.Filter(instance, ownerKind == "Job")
 
 	if filteredMsgRes == nil {
 		incidentID, err := r.redisClient.GetActiveIncident(ctx, porterReleaseName, instance.Namespace)
