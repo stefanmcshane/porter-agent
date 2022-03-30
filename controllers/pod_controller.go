@@ -192,12 +192,14 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 			return ctrl.Result{Requeue: true}, err
 		}
 
-		sort.SliceStable(jobPods.Items, func(i, j int) bool {
-			return jobPods.Items[i].CreationTimestamp.After(jobPods.Items[j].CreationTimestamp.Time)
-		})
+		if len(jobPods.Items) > 0 {
+			sort.SliceStable(jobPods.Items, func(i, j int) bool {
+				return jobPods.Items[i].CreationTimestamp.After(jobPods.Items[j].CreationTimestamp.Time)
+			})
 
-		if jobPods.Items[0].Name != instance.Name {
-			return ctrl.Result{}, nil
+			if jobPods.Items[0].Name != instance.Name {
+				return ctrl.Result{}, nil
+			}
 		}
 	}
 
@@ -208,24 +210,21 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	if filteredMsgRes == nil {
 		incidentID, err := r.redisClient.GetActiveIncident(ctx, porterReleaseName, instance.Namespace)
 		if err == nil {
-			// special case for when a liveness/readiness probe has an issue but the pod becomes Running
-			latestEvent, err := r.redisClient.GetLatestEventForIncident(ctx, incidentID)
-			if err == nil {
-				if strings.Contains(latestEvent.Message, "probe") && strings.Contains(latestEvent.Message, "failed") {
-					for _, podCondition := range instance.Status.Conditions {
-						if (podCondition.Type == "Ready" && podCondition.Status == "False") ||
-							(podCondition.Type == "ContainersReady" && podCondition.Status == "False") {
-							return ctrl.Result{}, nil
-						}
-					}
-				}
-			}
-
 			if ownerKind == "Job" {
 				// since a job has one running pod at a time and here we know that it has run successfully
 				r.redisClient.SetJobIncidentResolved(ctx, incidentID) // FIXME: make use of the error
 			} else {
-				r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
+				// wait for 10 mins before setting pod to resolved
+				startedAt, valid := r.getLatestRunningStartedAt(instance)
+				if valid {
+					if time.Now().After(startedAt.Add(10 * time.Minute)) {
+						r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
+					} else {
+						return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+					}
+				} else {
+					r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
+				}
 			}
 		}
 
@@ -410,6 +409,20 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	return ctrl.Result{}, nil
 }
 
+func (r *PodReconciler) getLatestRunningStartedAt(pod *corev1.Pod) (time.Time, bool) {
+	var tm time.Time
+	count := 0
+
+	for _, container := range pod.Status.ContainerStatuses {
+		if container.State.Running != nil && container.State.Running.StartedAt.After(tm) {
+			tm = container.State.Running.StartedAt.Time
+			count += 1
+		}
+	}
+
+	return tm, count > 0
+}
+
 func (r *PodReconciler) hasLastTerminatedState(pod *corev1.Pod, containerName string) bool {
 	for i := len(pod.Status.ContainerStatuses) - 1; i >= 0; i-- {
 		if containerName == pod.Status.ContainerStatuses[i].Name {
@@ -417,6 +430,8 @@ func (r *PodReconciler) hasLastTerminatedState(pod *corev1.Pod, containerName st
 				pod.Status.ContainerStatuses[i].LastTerminationState.Terminated != nil {
 				return true
 			}
+
+			return false
 		}
 	}
 
