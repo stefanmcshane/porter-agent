@@ -49,12 +49,44 @@ func (f *AgentPodFilter) Filter(pod *corev1.Pod, isJob bool) *FilteredMessageRes
 	res := &FilteredMessageResult{}
 
 	for i := len(pod.Status.ContainerStatuses) - 1; i >= 0; i-- {
-		if isJob && (pod.Status.ContainerStatuses[i].Name == "sidecar" ||
-			pod.Status.ContainerStatuses[i].Name == "cloud-sql-proxy") {
+		status := pod.Status.ContainerStatuses[i]
+
+		if isJob && (status.Name == "sidecar" || status.Name == "cloud-sql-proxy") {
 			continue
 		}
 
-		status := pod.Status.ContainerStatuses[i]
+		scaleDownEvent := f.getContainerEventForReasons(pod.Name, pod.Namespace, status.Name, "ScaleDown")
+		if scaleDownEvent != nil && strings.Contains(scaleDownEvent.Message, "deleting pod for node scale down") {
+			continue
+		}
+
+		// if the exit code is 255, we check that the job doesn't have a different associated pod.
+		// exit code 255 can mean this pod was moved to a different node due to node eviction, scaledown,
+		// unhealthy node, etc
+		if (status.State.Terminated != nil && status.State.Terminated.ExitCode == 255) ||
+			(status.LastTerminationState.Terminated != nil && status.LastTerminationState.Terminated.ExitCode == 255) {
+			pods, err := f.kubeClient.CoreV1().Pods(pod.Namespace).List(
+				context.Background(), v1.ListOptions{
+					LabelSelector: fmt.Sprintf("app.kubernetes.io/instance=%s", pod.Labels["app.kubernetes.io/instance"]),
+				},
+			)
+
+			if err == nil && len(pods.Items) > 0 {
+				shouldContinue := false
+
+				for _, ownerPod := range pods.Items {
+					if ownerPod.ObjectMeta.Name != pod.Name {
+						shouldContinue = true
+						break
+					}
+				}
+
+				if shouldContinue {
+					continue
+				}
+			}
+		}
+
 		containerResult := &FilteredMessageContainerResult{
 			ContainerName: status.Name,
 		}
@@ -65,9 +97,23 @@ func (f *AgentPodFilter) Filter(pod *corev1.Pod, isJob bool) *FilteredMessageRes
 					if status.LastTerminationState.Terminated.Reason == "Error" {
 						containerResult.Summary = fmt.Sprintf("The application exited with exit code %d",
 							status.LastTerminationState.Terminated.ExitCode)
-						containerResult.Details = fmt.Sprintf("The application exited with exit code %d. "+
-							"Please see the list of exit codes in the Porter documentation: <docs-link>",
-							status.LastTerminationState.Terminated.ExitCode)
+
+						if status.LastTerminationState.Terminated.ExitCode == 137 {
+							// check for possible Killing or Unhealthy events for this container
+							event := f.getContainerEventForReasons(
+								pod.Name, pod.Namespace, status.Name, "Killing", "Unhealthy",
+							)
+
+							if event != nil {
+								containerResult.Details = event.Message
+							}
+						}
+
+						if containerResult.Details == "" {
+							containerResult.Details = fmt.Sprintf("The application exited with exit code %d. "+
+								"Please see the list of exit codes in the Porter documentation: <docs-link>",
+								status.LastTerminationState.Terminated.ExitCode)
+						}
 					} else if status.LastTerminationState.Terminated.Reason == "OOMKilled" {
 						containerResult.Summary = "The application was killed because it used too much memory"
 						containerResult.Details = fmt.Sprintf("The application exceeded its memory limit of %s. ",
@@ -96,10 +142,24 @@ func (f *AgentPodFilter) Filter(pod *corev1.Pod, isJob bool) *FilteredMessageRes
 		} else if status.State.Terminated != nil && status.State.Terminated.Reason != "" {
 			if status.State.Terminated.Reason == "Error" {
 				containerResult.Summary = fmt.Sprintf("The application exited with exit code %d",
-					status.LastTerminationState.Terminated.ExitCode)
-				containerResult.Details = fmt.Sprintf("The application exited with exit code %d. "+
-					"Please see the list of exit codes in the Porter documentation: <docs-link>",
-					status.LastTerminationState.Terminated.ExitCode)
+					status.State.Terminated.ExitCode)
+
+				if status.State.Terminated.ExitCode == 137 {
+					// check for possible Killing or Unhealthy events for this container
+					event := f.getContainerEventForReasons(
+						pod.Name, pod.Namespace, status.Name, "Killing", "Unhealthy",
+					)
+
+					if event != nil {
+						containerResult.Details = event.Message
+					}
+				}
+
+				if containerResult.Details == "" {
+					containerResult.Details = fmt.Sprintf("The application exited with exit code %d. "+
+						"Please see the list of exit codes in the Porter documentation: <docs-link>",
+						status.State.Terminated.ExitCode)
+				}
 			} else if status.State.Terminated.Reason == "OOMKilled" {
 				containerResult.Summary = "The application was killed because it used too much memory"
 				containerResult.Details = fmt.Sprintf("The application exceeded its memory limit of %s. ",
@@ -126,29 +186,6 @@ func (f *AgentPodFilter) Filter(pod *corev1.Pod, isJob bool) *FilteredMessageRes
 	}
 
 	if len(res.ContainerStatuses) == 0 {
-		// check for possible events-based errors like unhealthy liveness probe
-		for _, container := range pod.Status.ContainerStatuses {
-			events, err := f.kubeClient.CoreV1().Events(pod.Namespace).List(
-				context.Background(), v1.ListOptions{
-					FieldSelector: fmt.Sprintf(
-						"involvedObject.name=%s,reason=Killing,involvedObject.fieldPath=spec.containers{%s}",
-						pod.Name, container.Name),
-				},
-			)
-
-			if err == nil && len(events.Items) > 0 {
-				f.sortEventsByCreationTimestamp(events.Items)
-
-				res.ContainerStatuses = append(res.ContainerStatuses, &FilteredMessageContainerResult{
-					ContainerName: container.Name,
-					Summary:       "",
-					Details:       events.Items[0].Message,
-				})
-			}
-		}
-	}
-
-	if len(res.ContainerStatuses) == 0 {
 		return nil
 	} else if len(res.ContainerStatuses) == 1 {
 		res.PodSummary = res.ContainerStatuses[0].Summary
@@ -167,6 +204,27 @@ func (f *AgentPodFilter) Filter(pod *corev1.Pod, isJob bool) *FilteredMessageRes
 	}
 
 	return res
+}
+
+func (f *AgentPodFilter) getContainerEventForReasons(
+	podName, namespace, containerName string, reasons ...string,
+) *corev1.Event {
+	for _, reason := range reasons {
+		events, err := f.kubeClient.CoreV1().Events(namespace).List(
+			context.Background(), v1.ListOptions{
+				FieldSelector: fmt.Sprintf(
+					"involvedObject.name=%s,reason=%s,involvedObject.fieldPath=spec.containers{%s}",
+					podName, reason, containerName),
+			},
+		)
+
+		if err == nil && len(events.Items) > 0 {
+			f.sortEventsByCreationTimestamp(events.Items)
+			return events.Items[0].DeepCopy()
+		}
+	}
+
+	return nil
 }
 
 func (f *AgentPodFilter) sortEventsByCreationTimestamp(events []corev1.Event) {

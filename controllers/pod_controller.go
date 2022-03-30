@@ -177,7 +177,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 		if ignore {
 			r.logger.Info("ignoring multipod deployment", "deployment", ownerName, "pod", instance.Name)
-			// return ctrl.Result{}, nil
+			return ctrl.Result{}, nil
 		}
 	} else if ownerKind == "Job" {
 		// we care only for the most recent pod for a job
@@ -208,6 +208,19 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	if filteredMsgRes == nil {
 		incidentID, err := r.redisClient.GetActiveIncident(ctx, porterReleaseName, instance.Namespace)
 		if err == nil {
+			// special case for when a liveness/readiness probe has an issue but the pod becomes Running
+			latestEvent, err := r.redisClient.GetLatestEventForIncident(ctx, incidentID)
+			if err == nil {
+				if strings.Contains(latestEvent.Message, "probe") && strings.Contains(latestEvent.Message, "failed") {
+					for _, podCondition := range instance.Status.Conditions {
+						if (podCondition.Type == "Ready" && podCondition.Status == "False") ||
+							(podCondition.Type == "ContainersReady" && podCondition.Status == "False") {
+							return ctrl.Result{}, nil
+						}
+					}
+				}
+			}
+
 			if ownerKind == "Job" {
 				// since a job has one running pod at a time and here we know that it has run successfully
 				r.redisClient.SetJobIncidentResolved(ctx, incidentID) // FIXME: make use of the error
@@ -524,7 +537,7 @@ func (r *PodReconciler) canIgnoreMultipodDeployment(ctx context.Context, req rec
 
 	minUnavailable := *(depl.Spec.Replicas) - getMaxUnavailable(depl)
 
-	if minUnavailable > depl.Status.ReadyReplicas {
+	if minUnavailable <= depl.Status.ReadyReplicas {
 		return true, nil
 	}
 
