@@ -140,6 +140,7 @@ func (f *AgentPodFilter) Filter(pod *corev1.Pod, isJob bool) *FilteredMessageRes
 				containerResult.Summary = "The image could not be pulled from the registry because the image URI is invalid"
 				containerResult.Details = fmt.Sprintf("The specified image %s is not a valid image URI.", status.Image)
 			}
+			// FIXME: check for RunContainerError
 		} else if status.State.Terminated != nil && status.State.Terminated.Reason != "" {
 			if status.State.Terminated.Reason == "Error" {
 				containerResult.Summary = fmt.Sprintf("The application exited with exit code %d",

@@ -167,19 +167,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 	}
 
-	if ownerKind == "Deployment" {
-		ignore, _ := r.canIgnoreMultipodDeployment(ctx, reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      ownerName,
-				Namespace: req.Namespace,
-			},
-		})
-
-		if ignore {
-			r.logger.Info("ignoring multipod deployment", "deployment", ownerName, "pod", instance.Name)
-			return ctrl.Result{}, nil
-		}
-	} else if ownerKind == "Job" {
+	if ownerKind == "Job" {
 		// we care only for the most recent pod for a job
 		jobPods, err := r.KubeClient.CoreV1().Pods(instance.Namespace).List(
 			ctx, metav1.ListOptions{
@@ -214,16 +202,32 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 				// since a job has one running pod at a time and here we know that it has run successfully
 				r.redisClient.SetJobIncidentResolved(ctx, incidentID) // FIXME: make use of the error
 			} else {
-				// wait for 10 mins before setting pod to resolved
-				startedAt, valid := r.getLatestRunningStartedAt(instance)
-				if valid {
-					if time.Now().After(startedAt.Add(10 * time.Minute)) {
-						r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
-					} else {
-						return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+				allRunning := true
+
+				for _, container := range instance.Status.ContainerStatuses {
+					if container.State.Running == nil {
+						allRunning = false
+						break
 					}
-				} else {
-					r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
+				}
+
+				if allRunning {
+					startedAt, valid := r.getLatestRunningStartedAt(instance)
+					if valid && time.Now().After(startedAt.Add(10*time.Minute)) {
+						r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
+						return ctrl.Result{}, nil
+					}
+				}
+
+				ignore, _ := r.canIgnoreMultipodDeployment(ctx, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      ownerName,
+						Namespace: req.Namespace,
+					},
+				})
+
+				if ignore {
+					r.redisClient.SetJobIncidentResolved(ctx, incidentID)
 				}
 			}
 		}
@@ -257,6 +261,20 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 			return ctrl.Result{Requeue: true}, err
 		}
 	} else {
+		if ownerKind == "Deployment" {
+			ignore, _ := r.canIgnoreMultipodDeployment(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      ownerName,
+					Namespace: req.Namespace,
+				},
+			})
+
+			if ignore {
+				r.logger.Info("ignoring multipod deployment", "deployment", ownerName, "pod", instance.Name)
+				return ctrl.Result{}, nil
+			}
+		}
+
 		incidentID, err = r.redisClient.CreateActiveIncident(ctx, porterReleaseName, instance.Namespace)
 		if err != nil {
 			return ctrl.Result{Requeue: true}, err
