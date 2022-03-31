@@ -122,7 +122,8 @@ func (f *AgentPodFilter) Filter(pod *corev1.Pod, isJob bool) *FilteredMessageRes
 						containerResult.Details += "Reduce the amount of memory your application is using or increase the memory limit - " +
 							"see the docs here for more information: https://docs.porter.run/managing-applications/" +
 							"application-troubleshooting#memory-usage"
-					} else if status.LastTerminationState.Terminated.Reason == "ContainerCannotRun" {
+					} else if status.LastTerminationState.Terminated.Reason == "ContainerCannotRun" ||
+						status.LastTerminationState.Terminated.Reason == "StartError" {
 						containerResult.Summary = "The application could not start running"
 						containerResult.Details = getFilteredMessage(status.LastTerminationState.Terminated.Message)
 					}
@@ -168,7 +169,8 @@ func (f *AgentPodFilter) Filter(pod *corev1.Pod, isJob bool) *FilteredMessageRes
 				containerResult.Details += "Reduce the amount of memory your application is using or increase the memory limit - " +
 					"see the docs here for more information: https://docs.porter.run/managing-applications/" +
 					"application-troubleshooting#memory-usage"
-			} else if status.State.Terminated.Reason == "ContainerCannotRun" {
+			} else if status.State.Terminated.Reason == "ContainerCannotRun" ||
+				status.State.Terminated.Reason == "StartError" {
 				containerResult.Summary = "The application could not start running"
 				containerResult.Details = getFilteredMessage(status.State.Terminated.Message)
 			}
