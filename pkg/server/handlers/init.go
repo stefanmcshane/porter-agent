@@ -24,5 +24,4 @@ func init() {
 	redisHost = viper.GetString("REDIS_HOST")
 	redisPort = viper.GetString("REDIS_PORT")
 	redisClient = redis.NewClient(redisHost, redisPort, "", "", redis.PODSTORE, maxTailLines)
-
 }

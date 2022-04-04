@@ -1,19 +1,3 @@
-/*
-Copyright 2021.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package main
 
 import (
@@ -25,8 +9,11 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 
+	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -37,8 +24,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/porter-dev/porter-agent/controllers"
 	"github.com/porter-dev/porter-agent/pkg/consumer"
-	"github.com/porter-dev/porter-agent/pkg/processor"
 	"github.com/porter-dev/porter-agent/pkg/server/routes"
+	"github.com/porter-dev/porter-agent/pkg/utils"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -86,10 +73,39 @@ func main() {
 		os.Exit(1)
 	}
 
+	// first check if the redis server is running and wait for it if needed
+	kubeClient := kubernetes.NewForConfigOrDie(mgr.GetConfig())
+	for {
+		pods, err := kubeClient.CoreV1().Pods("porter-agent-system").List(
+			context.Background(), v1.ListOptions{
+				LabelSelector: "app.kubernetes.io/name=redis",
+			},
+		)
+
+		if err == nil && len(pods.Items) > 0 {
+			running := false
+
+			for _, pod := range pods.Items {
+				if pod.Status.Phase == corev1.PodRunning {
+					running = true
+					break
+				}
+			}
+
+			if running {
+				break
+			}
+		}
+
+		setupLog.Info("waiting for redis ...")
+		time.Sleep(time.Second * 2)
+	}
+
 	if err = (&controllers.PodReconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		Processor: processor.NewPodEventProcessor(mgr.GetConfig()),
+		Client:     mgr.GetClient(),
+		Scheme:     mgr.GetScheme(),
+		KubeClient: kubeClient,
+		PodFilter:  utils.NewAgentPodFilter(kubeClient),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pod")
 		os.Exit(1)
