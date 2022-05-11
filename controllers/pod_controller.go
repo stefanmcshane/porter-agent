@@ -115,12 +115,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	porterReleaseName, ownerName, ownerKind, chartName := r.getOwnerDetails(ctx, req, instance)
 
-	// FIXME: we ignore the pod which has an empty release name, need to
-	//        change this behavior when making porter-agnostic
-	if porterReleaseName == "" {
-		return ctrl.Result{}, nil
-	}
-
 	customFinalizer := "porter.run/agent-finalizer"
 
 	finalizers := instance.Finalizers
@@ -171,6 +165,12 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 			return ctrl.Result{}, nil
 		}
+	}
+
+	// FIXME: we ignore the pod which has an empty release name, need to
+	//        change this behavior when making porter-agnostic
+	if porterReleaseName == "" {
+		return ctrl.Result{}, nil
 	}
 
 	if ownerKind == "Job" {
