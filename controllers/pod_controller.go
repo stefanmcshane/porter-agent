@@ -114,53 +114,36 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	customFinalizer := "porter.run/agent-finalizer"
 
 	finalizers := instance.Finalizers
-	if ownerKind != "Job" {
-		if instance.ObjectMeta.DeletionTimestamp.IsZero() {
-			found := false
-			for _, fin := range finalizers {
-				if fin == customFinalizer {
-					found = true
-					break
-				}
+	if ownerKind != "Job" && !instance.ObjectMeta.DeletionTimestamp.IsZero() {
+		found := false
+		for _, fin := range finalizers {
+			if fin == customFinalizer {
+				found = true
+				break
 			}
-
-			if !found {
-				instance.SetFinalizers(append(finalizers, customFinalizer))
-				if err := r.Update(ctx, instance); err != nil {
-					return ctrl.Result{Requeue: true}, fmt.Errorf("error adding custom finalizer: %w", err)
-				}
-			}
-		} else {
-			found := false
-			for _, fin := range finalizers {
-				if fin == customFinalizer {
-					found = true
-					break
-				}
-			}
-
-			if found {
-				incidentID, err := r.redisClient.GetActiveIncident(ctx, porterReleaseName, instance.Namespace)
-				if err == nil {
-					r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
-				}
-
-				// remove the finalizer
-				var updatedFinalizers []string
-				for _, fin := range finalizers {
-					if fin != customFinalizer {
-						updatedFinalizers = append(updatedFinalizers, fin)
-					}
-				}
-
-				instance.SetFinalizers(updatedFinalizers)
-				if err = r.Update(ctx, instance); err != nil {
-					return ctrl.Result{Requeue: true}, fmt.Errorf("error removing custom finalizer: %w", err)
-				}
-			}
-
-			return ctrl.Result{}, nil
 		}
+
+		if found {
+			incidentID, err := r.redisClient.GetActiveIncident(ctx, porterReleaseName, instance.Namespace)
+			if err == nil {
+				r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
+			}
+
+			// remove the finalizer
+			var updatedFinalizers []string
+			for _, fin := range finalizers {
+				if fin != customFinalizer {
+					updatedFinalizers = append(updatedFinalizers, fin)
+				}
+			}
+
+			instance.SetFinalizers(updatedFinalizers)
+			if err = r.Update(ctx, instance); err != nil {
+				return ctrl.Result{Requeue: true}, fmt.Errorf("error removing custom finalizer: %w", err)
+			}
+		}
+
+		return ctrl.Result{}, nil
 	}
 
 	agentCreationTimestamp, err := r.redisClient.GetAgentCreationTimestamp(ctx)
@@ -171,6 +154,23 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	if instance.GetCreationTimestamp().Unix() < agentCreationTimestamp {
 		return ctrl.Result{}, nil
+	}
+
+	if ownerKind != "Job" && instance.ObjectMeta.DeletionTimestamp.IsZero() {
+		found := false
+		for _, fin := range finalizers {
+			if fin == customFinalizer {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			instance.SetFinalizers(append(finalizers, customFinalizer))
+			if err := r.Update(ctx, instance); err != nil {
+				return ctrl.Result{Requeue: true}, fmt.Errorf("error adding custom finalizer: %w", err)
+			}
+		}
 	}
 
 	if ownerKind == "Job" {
