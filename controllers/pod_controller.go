@@ -103,17 +103,13 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	agentCreationTimestamp, err := r.redisClient.GetAgentCreationTimestamp(ctx)
-	if err != nil {
-		r.logger.Error(err, "redisClient.GetAgentCreationTimestamp ERROR")
-		return ctrl.Result{}, err
-	}
+	porterReleaseName, ownerName, ownerKind, chartName := r.getOwnerDetails(ctx, req, instance)
 
-	if instance.GetCreationTimestamp().Unix() < agentCreationTimestamp {
+	// FIXME: we ignore the pod which has an empty release name, need to
+	//        change this behavior when making porter-agnostic
+	if porterReleaseName == "" {
 		return ctrl.Result{}, nil
 	}
-
-	porterReleaseName, ownerName, ownerKind, chartName := r.getOwnerDetails(ctx, req, instance)
 
 	customFinalizer := "porter.run/agent-finalizer"
 
@@ -167,9 +163,13 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 	}
 
-	// FIXME: we ignore the pod which has an empty release name, need to
-	//        change this behavior when making porter-agnostic
-	if porterReleaseName == "" {
+	agentCreationTimestamp, err := r.redisClient.GetAgentCreationTimestamp(ctx)
+	if err != nil {
+		r.logger.Error(err, "redisClient.GetAgentCreationTimestamp ERROR")
+		return ctrl.Result{}, err
+	}
+
+	if instance.GetCreationTimestamp().Unix() < agentCreationTimestamp {
 		return ctrl.Result{}, nil
 	}
 
