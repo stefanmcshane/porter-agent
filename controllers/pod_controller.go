@@ -103,6 +103,49 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
+	porterReleaseName, ownerName, ownerKind, chartName := r.getOwnerDetails(ctx, req, instance)
+
+	// FIXME: we ignore the pod which has an empty release name, need to
+	//        change this behavior when making porter-agnostic
+	if porterReleaseName == "" {
+		return ctrl.Result{}, nil
+	}
+
+	customFinalizer := "porter.run/agent-finalizer"
+
+	finalizers := instance.Finalizers
+	if ownerKind != "Job" && !instance.ObjectMeta.DeletionTimestamp.IsZero() {
+		incidentID, err := r.redisClient.GetActiveIncident(ctx, porterReleaseName, instance.Namespace)
+		if err == nil {
+			r.redisClient.SetPodResolved(ctx, instance.Name, incidentID)
+		}
+
+		found := false
+		for _, fin := range finalizers {
+			if fin == customFinalizer {
+				found = true
+				break
+			}
+		}
+
+		if found {
+			// remove the finalizer
+			var updatedFinalizers []string
+			for _, fin := range finalizers {
+				if fin != customFinalizer {
+					updatedFinalizers = append(updatedFinalizers, fin)
+				}
+			}
+
+			instance.SetFinalizers(updatedFinalizers)
+			if err = r.Update(ctx, instance); err != nil {
+				return ctrl.Result{Requeue: true}, fmt.Errorf("error removing custom finalizer: %w", err)
+			}
+		}
+
+		return ctrl.Result{}, nil
+	}
+
 	agentCreationTimestamp, err := r.redisClient.GetAgentCreationTimestamp(ctx)
 	if err != nil {
 		r.logger.Error(err, "redisClient.GetAgentCreationTimestamp ERROR")
@@ -110,66 +153,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	if instance.GetCreationTimestamp().Unix() < agentCreationTimestamp {
-		return ctrl.Result{}, nil
-	}
-
-	porterReleaseName, ownerName, ownerKind, chartName := r.getOwnerDetails(ctx, req, instance)
-
-	customFinalizer := "porter.run/agent-finalizer"
-
-	finalizers := instance.Finalizers
-	if ownerKind != "Job" {
-		if instance.ObjectMeta.DeletionTimestamp.IsZero() {
-			found := false
-			for _, fin := range finalizers {
-				if fin == customFinalizer {
-					found = true
-					break
-				}
-			}
-
-			if !found {
-				instance.SetFinalizers(append(finalizers, customFinalizer))
-				if err := r.Update(ctx, instance); err != nil {
-					return ctrl.Result{Requeue: true}, fmt.Errorf("error adding custom finalizer: %w", err)
-				}
-			}
-		} else {
-			found := false
-			for _, fin := range finalizers {
-				if fin == customFinalizer {
-					found = true
-					break
-				}
-			}
-
-			if found {
-				incidentID, err := r.redisClient.GetActiveIncident(ctx, porterReleaseName, instance.Namespace)
-				if err == nil {
-					r.redisClient.SetPodResolved(ctx, instance.Name, incidentID) // FIXME: make use of the error
-				}
-
-				// remove the finalizer
-				var updatedFinalizers []string
-				for _, fin := range finalizers {
-					if fin != customFinalizer {
-						updatedFinalizers = append(updatedFinalizers, fin)
-					}
-				}
-
-				instance.SetFinalizers(updatedFinalizers)
-				if err = r.Update(ctx, instance); err != nil {
-					return ctrl.Result{Requeue: true}, fmt.Errorf("error removing custom finalizer: %w", err)
-				}
-			}
-
-			return ctrl.Result{}, nil
-		}
-	}
-
-	// FIXME: we ignore the pod which has an empty release name, need to
-	//        change this behavior when making porter-agnostic
-	if porterReleaseName == "" {
 		return ctrl.Result{}, nil
 	}
 
