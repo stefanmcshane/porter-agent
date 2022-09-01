@@ -58,6 +58,8 @@ func init() {
 	containerSignals[15] = "SIGTERM"
 }
 
+const customFinalizer = "porter.run/agent-finalizer"
+
 // PodReconciler reconciles a Pod object
 type PodReconciler struct {
 	client.Client
@@ -103,6 +105,23 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
+	agentCreationTimestamp, err := r.redisClient.GetAgentCreationTimestamp(ctx)
+	if err != nil {
+		r.logger.Error(err, "redisClient.GetAgentCreationTimestamp ERROR")
+		return ctrl.Result{}, err
+	}
+
+	if instance.GetCreationTimestamp().Unix() < agentCreationTimestamp {
+		// we need to remove the agent finalizer for such pods so that they don't linger on
+		err = r.deleteFinalizerIfExists(ctx, instance)
+
+		if err != nil {
+			return ctrl.Result{Requeue: true}, err
+		}
+
+		return ctrl.Result{}, nil
+	}
+
 	porterReleaseName, ownerName, ownerKind, chartName := r.getOwnerDetails(ctx, req, instance)
 
 	// FIXME: we ignore the pod which has an empty release name, need to
@@ -111,32 +130,39 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	err = r.deleteFinalizerIfExists(ctx, instance)
+	if ownerKind != "Job" {
+		if instance.ObjectMeta.DeletionTimestamp.IsZero() { // a newly created pod
+			// add the finalizer to the pod since we need to be informed of its deletion
+			found := false
 
-	if err != nil {
-		return ctrl.Result{Requeue: true}, err
-	}
+			for _, fin := range instance.Finalizers {
+				if fin == customFinalizer {
+					found = true
+					break
+				}
+			}
 
-	if ownerKind != "Job" && !instance.ObjectMeta.DeletionTimestamp.IsZero() {
-		incidentID, err := r.redisClient.GetActiveIncident(ctx, porterReleaseName, instance.Namespace)
-		if err == nil {
-			r.redisClient.SetPodResolved(ctx, instance.Name, incidentID)
+			if !found {
+				instance.SetFinalizers(append(instance.GetFinalizers(), customFinalizer))
+
+				err := r.Update(ctx, instance)
+				if err != nil {
+					return ctrl.Result{Requeue: true}, fmt.Errorf("error adding finalizer to pod: %w", err)
+				}
+			}
+		} else { // a pod scheduled for deletion
+			incidentID, err := r.redisClient.GetActiveIncident(ctx, porterReleaseName, instance.Namespace)
+			if err == nil {
+				r.redisClient.SetPodResolved(ctx, instance.Name, incidentID)
+			}
+
+			err = r.deleteFinalizerIfExists(ctx, instance)
+
+			if err != nil {
+				return ctrl.Result{Requeue: true}, err
+			}
 		}
-
-		return ctrl.Result{}, nil
-	}
-
-	agentCreationTimestamp, err := r.redisClient.GetAgentCreationTimestamp(ctx)
-	if err != nil {
-		r.logger.Error(err, "redisClient.GetAgentCreationTimestamp ERROR")
-		return ctrl.Result{}, err
-	}
-
-	if instance.GetCreationTimestamp().Unix() < agentCreationTimestamp {
-		return ctrl.Result{}, nil
-	}
-
-	if ownerKind == "Job" {
+	} else {
 		// we care only for the most recent pod for a job
 		jobPods, err := r.KubeClient.CoreV1().Pods(instance.Namespace).List(
 			ctx, metav1.ListOptions{
@@ -396,14 +422,8 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	return ctrl.Result{}, nil
 }
 
-// In earlier versions of the agent, we were using a custom finalizer to control pod deletion.
-// However, it was soon discovered that this was not a good idea, and resulted in "zombie" pods
-// that were stuck at "Terminating" due to the finalizer when the agent itself crashed.
-//
-// This method takes care of removing such a finalizer from a pod, if it exists.
+// This method takes care of removing the agent finalizer from a pod, if it exists.
 func (r *PodReconciler) deleteFinalizerIfExists(ctx context.Context, instance *corev1.Pod) error {
-	customFinalizer := "porter.run/agent-finalizer"
-
 	finalizers := instance.Finalizers
 
 	found := false
