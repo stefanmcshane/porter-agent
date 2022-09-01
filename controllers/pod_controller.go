@@ -111,36 +111,16 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	customFinalizer := "porter.run/agent-finalizer"
+	err = r.deleteFinalizerIfExists(ctx, instance)
 
-	finalizers := instance.Finalizers
+	if err != nil {
+		return ctrl.Result{Requeue: true}, err
+	}
+
 	if ownerKind != "Job" && !instance.ObjectMeta.DeletionTimestamp.IsZero() {
 		incidentID, err := r.redisClient.GetActiveIncident(ctx, porterReleaseName, instance.Namespace)
 		if err == nil {
 			r.redisClient.SetPodResolved(ctx, instance.Name, incidentID)
-		}
-
-		found := false
-		for _, fin := range finalizers {
-			if fin == customFinalizer {
-				found = true
-				break
-			}
-		}
-
-		if found {
-			// remove the finalizer
-			var updatedFinalizers []string
-			for _, fin := range finalizers {
-				if fin != customFinalizer {
-					updatedFinalizers = append(updatedFinalizers, fin)
-				}
-			}
-
-			instance.SetFinalizers(updatedFinalizers)
-			if err = r.Update(ctx, instance); err != nil {
-				return ctrl.Result{Requeue: true}, fmt.Errorf("error removing custom finalizer: %w", err)
-			}
 		}
 
 		return ctrl.Result{}, nil
@@ -414,6 +394,42 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// In earlier versions of the agent, we were using a custom finalizer to control pod deletion.
+// However, it was soon discovered that this was not a good idea, and resulted in "zombie" pods
+// that were stuck at "Terminating" due to the finalizer when the agent itself crashed.
+//
+// This method takes care of removing such a finalizer from a pod, if it exists.
+func (r *PodReconciler) deleteFinalizerIfExists(ctx context.Context, instance *corev1.Pod) error {
+	customFinalizer := "porter.run/agent-finalizer"
+
+	finalizers := instance.Finalizers
+
+	found := false
+	for _, fin := range finalizers {
+		if fin == customFinalizer {
+			found = true
+			break
+		}
+	}
+
+	if found {
+		// remove the finalizer
+		var updatedFinalizers []string
+		for _, fin := range finalizers {
+			if fin != customFinalizer {
+				updatedFinalizers = append(updatedFinalizers, fin)
+			}
+		}
+
+		instance.SetFinalizers(updatedFinalizers)
+		if err := r.Update(ctx, instance); err != nil {
+			return fmt.Errorf("error removing custom finalizer: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (r *PodReconciler) getLatestRunningStartedAt(pod *corev1.Pod) (time.Time, bool) {
