@@ -98,6 +98,13 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// we need to remove the agent finalizer for such pods so that they don't linger on
+	err = r.deleteFinalizerIfExists(ctx, instance)
+
+	if err != nil {
+		return ctrl.Result{Requeue: true}, err
+	}
+
 	if instance.Namespace == "cert-manager" || instance.Namespace == "ingress-nginx" ||
 		instance.Namespace == "kube-node-lease" || instance.Namespace == "kube-public" ||
 		instance.Namespace == "kube-system" || instance.Namespace == "monitoring" ||
@@ -112,13 +119,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	if instance.GetCreationTimestamp().Unix() < agentCreationTimestamp {
-		// we need to remove the agent finalizer for such pods so that they don't linger on
-		err = r.deleteFinalizerIfExists(ctx, instance)
-
-		if err != nil {
-			return ctrl.Result{Requeue: true}, err
-		}
-
 		return ctrl.Result{}, nil
 	}
 
@@ -130,39 +130,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	if ownerKind != "Job" {
-		if instance.ObjectMeta.DeletionTimestamp.IsZero() { // a newly created pod
-			// add the finalizer to the pod since we need to be informed of its deletion
-			found := false
-
-			for _, fin := range instance.Finalizers {
-				if fin == customFinalizer {
-					found = true
-					break
-				}
-			}
-
-			if !found {
-				instance.SetFinalizers(append(instance.GetFinalizers(), customFinalizer))
-
-				err := r.Update(ctx, instance)
-				if err != nil {
-					return ctrl.Result{Requeue: true}, fmt.Errorf("error adding finalizer to pod: %w", err)
-				}
-			}
-		} else { // a pod scheduled for deletion
-			incidentID, err := r.redisClient.GetActiveIncident(ctx, porterReleaseName, instance.Namespace)
-			if err == nil {
-				r.redisClient.SetPodResolved(ctx, instance.Name, incidentID)
-			}
-
-			err = r.deleteFinalizerIfExists(ctx, instance)
-
-			if err != nil {
-				return ctrl.Result{Requeue: true}, err
-			}
-		}
-	} else {
+	if ownerKind == "Job" {
 		// we care only for the most recent pod for a job
 		jobPods, err := r.KubeClient.CoreV1().Pods(instance.Namespace).List(
 			ctx, metav1.ListOptions{
@@ -183,6 +151,11 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 			if jobPods.Items[0].Name != instance.Name {
 				return ctrl.Result{}, nil
 			}
+		}
+	} else if !instance.DeletionTimestamp.IsZero() {
+		incidentID, err := r.redisClient.GetActiveIncident(ctx, porterReleaseName, instance.Namespace)
+		if err == nil {
+			r.redisClient.SetPodResolved(ctx, instance.Name, incidentID)
 		}
 	}
 
