@@ -58,7 +58,7 @@ func ProcessDeletedPods() {
 		pods, err := redisClient.GetPodsForIncident(ctx, id)
 
 		if err != nil {
-			deletedPodsLogger.Error(err, "error getting active incidents")
+			deletedPodsLogger.Error(err, "error getting pods for incident")
 
 			continue
 		}
@@ -72,11 +72,11 @@ func ProcessDeletedPods() {
 
 			_, err := clientset.CoreV1().Pods(incidentObj.GetNamespace()).Get(ctx, pod, v1.GetOptions{})
 
-			deletedPodsLogger.Info(fmt.Sprintf("Error getting pod %s: %v", pod, err))
-
 			if err != nil && errors.IsNotFound(err) {
 				// pod was deleted, so we should remove it from the incident
 				redisClient.SetPodResolved(ctx, pod, id)
+			} else if err != nil {
+				deletedPodsLogger.Info(fmt.Sprintf("Error getting pod %s: %v", pod, err))
 			}
 		}
 	}
