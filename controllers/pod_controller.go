@@ -152,11 +152,6 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 				return ctrl.Result{}, nil
 			}
 		}
-	} else if !instance.DeletionTimestamp.IsZero() {
-		incidentID, err := r.redisClient.GetActiveIncident(ctx, porterReleaseName, instance.Namespace)
-		if err == nil {
-			r.redisClient.SetPodResolved(ctx, instance.Name, incidentID)
-		}
 	}
 
 	r.logger.Info("creating container events")

@@ -426,6 +426,33 @@ func (c *Client) GetAllIncidents(ctx context.Context) ([]string, error) {
 	return incidents, nil
 }
 
+func (c *Client) GetAllActiveIncidents(ctx context.Context) ([]string, error) {
+	incidents, err := c.client.Keys(ctx, "active_incident:*:*").Result()
+	if err != nil {
+		return nil, err
+	}
+
+	var incidentIDs []string
+
+	for _, incident := range incidents {
+		incidentID, err := c.client.Get(ctx, incident).Result()
+		if err == nil {
+			incidentIDs = append(incidentIDs, incidentID)
+		}
+	}
+
+	return incidentIDs, nil
+}
+
+func (c *Client) GetPodsForIncident(ctx context.Context, incidentID string) ([]string, error) {
+	pods, err := c.client.SMembers(ctx, fmt.Sprintf("pods:%s", incidentID)).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	return pods, nil
+}
+
 func (c *Client) GetIncidentsByReleaseNamespace(ctx context.Context, releaseName, namespace string) ([]string, error) {
 	incidents, err := c.client.Keys(ctx, fmt.Sprintf("incident:%s:%s:*", releaseName, namespace)).Result()
 	if err != nil {

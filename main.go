@@ -132,6 +132,16 @@ func main() {
 	httpServer = routes.NewRouter()
 	go httpServer.Run(":10001")
 
+	go func() {
+		// every 5 minutes, we check for deleted pods
+		// if a pod that was part of an active incident
+		// was deleted, we set the pod's status to resolved
+		for {
+			time.Sleep(time.Minute * 5)
+			controllers.ProcessDeletedPods()
+		}
+	}()
+
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
