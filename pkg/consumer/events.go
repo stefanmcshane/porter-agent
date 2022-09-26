@@ -30,24 +30,24 @@ var (
 	consumerLog = ctrl.Log.WithName("event-consumer")
 )
 
-func init() {
-	viper.SetDefault("REDIS_HOST", "porter-redis-master")
-	viper.SetDefault("REDIS_PORT", "6379")
-	viper.SetDefault("MAX_TAIL_LINES", int64(100))
-	viper.SetDefault("PORTER_PORT", "80")
-	viper.AutomaticEnv()
+// func init() {
+// 	viper.SetDefault("REDIS_HOST", "porter-redis-master")
+// 	viper.SetDefault("REDIS_PORT", "6379")
+// 	viper.SetDefault("MAX_TAIL_LINES", int64(100))
+// 	viper.SetDefault("PORTER_PORT", "80")
+// 	viper.AutomaticEnv()
 
-	redisHost = viper.GetString("REDIS_HOST")
-	redisPort = viper.GetString("REDIS_PORT")
-	maxTailLines = viper.GetInt64("MAX_TAIL_LINES")
+// 	redisHost = viper.GetString("REDIS_HOST")
+// 	redisPort = viper.GetString("REDIS_PORT")
+// 	maxTailLines = viper.GetInt64("MAX_TAIL_LINES")
 
-	porterPort = viper.GetString("PORTER_PORT")
-	porterHost = getStringOrDie("PORTER_HOST")
-	porterToken = getStringOrDie("PORTER_TOKEN")
-	clusterID = getStringOrDie("CLUSTER_ID")
-	projectID = getStringOrDie("PROJECT_ID")
+// 	porterPort = viper.GetString("PORTER_PORT")
+// 	porterHost = getStringOrDie("PORTER_HOST")
+// 	porterToken = getStringOrDie("PORTER_TOKEN")
+// 	clusterID = getStringOrDie("CLUSTER_ID")
+// 	projectID = getStringOrDie("PROJECT_ID")
 
-}
+// }
 
 type EventConsumer struct {
 	redisClient *redis.Client
