@@ -17,6 +17,4 @@ type Event struct {
 	Resource  string
 	Namespace string
 	Severity  SeverityType
-
-	Logs []Log
 }
