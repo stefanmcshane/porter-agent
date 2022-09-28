@@ -1,10 +1,12 @@
 package controllers
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/porter-dev/porter-agent/pkg/event"
+	"github.com/porter-dev/porter-agent/pkg/incident"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
@@ -16,8 +18,10 @@ import (
 //   1. Stores the events in the given event store
 //   2. Triggers the incident detection loop
 type EventController struct {
-	KubeClient *kubernetes.Clientset
-	EventStore event.EventStore
+	KubeClient       *kubernetes.Clientset
+	KubeVersion      incident.KubernetesVersion
+	EventStore       event.EventStore
+	IncidentDetector *incident.IncidentDetector
 }
 
 type AuthError struct{}
@@ -58,17 +62,56 @@ func (e *EventController) Start() {
 }
 
 func (e *EventController) processAddEvent(obj interface{}) {
-	event := obj.(*v1.Event)
-	fmt.Println("processing add event:", event.Name)
+	k8sEvent := obj.(*v1.Event)
+	e.processEvent(k8sEvent)
 }
 
 func (e *EventController) processUpdateEvent(oldObj, newObj interface{}) {
-	event := newObj.(*v1.Event)
-	fmt.Println("processing update event:", event.Name)
+	k8sEvent := newObj.(*v1.Event)
+	e.processEvent(k8sEvent)
+}
 
+func (e *EventController) processEvent(k8sEvent *v1.Event) error {
+	// TODO: de-duplicate events which have already been stored/processed based
+	// on both the timestamp and the event ID
+	if e.hasBeenProcessed(k8sEvent) {
+		return nil
+	}
+
+	fmt.Println("processing kubernetes event:", k8sEvent.Name)
+
+	filteredEvent := event.NewFilteredEventFromK8sEvent(k8sEvent)
+
+	es := []*event.FilteredEvent{filteredEvent}
+
+	// trigger incident detection loop
+	incident, err := e.IncidentDetector.DetectIncident(es)
+
+	if err != nil {
+		return e.updateEventCache(k8sEvent, err)
+	}
+
+	incidentBytes, err := json.Marshal(incident)
+
+	if err != nil {
+		return e.updateEventCache(k8sEvent, err)
+	}
+
+	fmt.Println(string(incidentBytes))
+
+	return e.updateEventCache(k8sEvent, nil)
+}
+
+func (e *EventController) hasBeenProcessed(k8sEvent *v1.Event) bool {
+	// TODO: query the event cache
+	return false
+}
+
+func (e *EventController) updateEventCache(k8sEvent *v1.Event, currError error) error {
+	// TODO: update the event cache
+	return currError
 }
 
 func (e *EventController) processDeleteEvent(obj interface{}) {
-	event := obj.(*v1.Event)
-	fmt.Println("processing delete event:", event.Name)
+	// TODO: remove from event cache
 }

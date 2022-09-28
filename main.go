@@ -19,6 +19,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/porter-dev/porter-agent/controllers"
 	"github.com/porter-dev/porter-agent/pkg/consumer"
+	"github.com/porter-dev/porter-agent/pkg/incident"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -66,14 +67,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	// first check if the redis server is running and wait for it if needed
 	kubeClient := kubernetes.NewForConfigOrDie(mgr.GetConfig())
 
-	eventController := controllers.EventController{
+	detector := &incident.IncidentDetector{
 		KubeClient: kubeClient,
+		// TODO: don't hardcode to 1.20
+		KubeVersion: incident.KubernetesVersion_1_20,
 	}
 
-	eventController.Start()
+	// eventController := controllers.EventController{
+	// 	KubeClient: kubeClient,
+	// 	// TODO: don't hardcode to 1.20
+	// 	KubeVersion:      incident.KubernetesVersion_1_20,
+	// 	IncidentDetector: detector,
+	// }
+
+	// eventController.Start()
+
+	podController := controllers.PodController{
+		KubeClient: kubeClient,
+		// TODO: don't hardcode to 1.20
+		KubeVersion:      incident.KubernetesVersion_1_20,
+		IncidentDetector: detector,
+	}
+
+	podController.Start()
 
 	// for {
 	// 	pods, err := kubeClient.CoreV1().Pods("porter-agent-system").List(
