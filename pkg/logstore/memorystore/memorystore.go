@@ -19,9 +19,28 @@ func (store *MemoryStore) getLogFilePath() string {
 	return path.Join("/var/tmp", store.name+".log")
 }
 
+func (store *MemoryStore) createLogFile() error {
+	logFilePath := store.getLogFilePath()
+	f, err := os.OpenFile(logFilePath, os.O_WRONLY|os.O_CREATE, 0666)
+
+	if err != nil {
+		return fmt.Errorf("error creating log file for memory store with name %s. Error: %w", store.name, err)
+	}
+
+	defer f.Close()
+
+	return nil
+}
+
 func New(name string) (*MemoryStore, error) {
 	store := new(MemoryStore)
 	store.name = name
+
+	err := store.createLogFile()
+
+	if err != nil {
+		return nil, err
+	}
 
 	logFilePath := store.getLogFilePath()
 	t, err := tail.TailFile(logFilePath, tail.Config{Follow: true})
@@ -61,7 +80,7 @@ func (store *MemoryStore) Push(log string) error {
 	f, err := os.OpenFile(logFilePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
 
 	if err != nil {
-		return fmt.Errorf("error pushing log to memory store with name %s. Error: %w", store.name, err)
+		return fmt.Errorf("error opening log file for memory store with name %s. Error: %w", store.name, err)
 	}
 
 	defer f.Close()
