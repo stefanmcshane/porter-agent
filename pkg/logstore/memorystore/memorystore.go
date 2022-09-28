@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/nxadm/tail"
@@ -11,16 +12,26 @@ import (
 )
 
 type MemoryStore struct {
-	name string
-	t    *tail.Tail
+	name     string
+	location string
+	t        *tail.Tail
 }
 
-func (store *MemoryStore) getLogFilePath() string {
-	return path.Join("/var/tmp", store.name+".log")
+type Options struct {
+	Dir string // Store the log file at this location. Defaults to /var/tmp
 }
 
 func (store *MemoryStore) createLogFile() error {
-	logFilePath := store.getLogFilePath()
+	logFilePath := store.location
+
+	logFileDir := filepath.Dir(logFilePath)
+
+	err := os.MkdirAll(logFileDir, os.ModePerm)
+
+	if err != nil {
+		return fmt.Errorf("error creating log directory for memory store with name %s. Error: %w", store.name, err)
+	}
+
 	f, err := os.OpenFile(logFilePath, os.O_WRONLY|os.O_CREATE, 0666)
 
 	if err != nil {
@@ -32,9 +43,17 @@ func (store *MemoryStore) createLogFile() error {
 	return nil
 }
 
-func New(name string) (*MemoryStore, error) {
+func New(name string, options Options) (*MemoryStore, error) {
 	store := new(MemoryStore)
 	store.name = name
+
+	logFileDir := options.Dir
+
+	if logFileDir == "" {
+		logFileDir = "/var/tmp"
+	}
+
+	store.location = path.Join(logFileDir, name+".log")
 
 	err := store.createLogFile()
 
@@ -42,7 +61,7 @@ func New(name string) (*MemoryStore, error) {
 		return nil, err
 	}
 
-	logFilePath := store.getLogFilePath()
+	logFilePath := store.location
 	t, err := tail.TailFile(logFilePath, tail.Config{Follow: true})
 
 	if err != nil {
@@ -75,7 +94,7 @@ func (store *MemoryStore) Stop() error {
 }
 
 func (store *MemoryStore) Push(log string) error {
-	logFilePath := store.getLogFilePath()
+	logFilePath := store.location
 
 	f, err := os.OpenFile(logFilePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
 
