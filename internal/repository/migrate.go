@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"github.com/porter-dev/porter-agent/pkg/models"
+	"github.com/porter-dev/porter-agent/internal/models"
 	"gorm.io/gorm"
 )
 
@@ -14,5 +14,7 @@ func AutoMigrate(db *gorm.DB, debug bool) error {
 
 	return instanceDB.AutoMigrate(
 		&models.Incident{},
+		&models.Event{},
+		&models.Log{},
 	)
 }

@@ -10,7 +10,7 @@ type IncidentRepository struct {
 	db *gorm.DB
 }
 
-// NewSessionRepository returns pointer to repo along with the db
+// NewIncidentRepository returns pointer to repo along with the db
 func NewIncidentRepository(db *gorm.DB) *IncidentRepository {
 	return &IncidentRepository{db}
 }
@@ -26,7 +26,7 @@ func (r *IncidentRepository) CreateIncident(incident *models.Incident) (*models.
 func (r *IncidentRepository) ReadIncident(uid string) (*models.Incident, error) {
 	incident := &models.Incident{}
 
-	if err := r.db.Where("unique_id = ?", uid).First(incident).Error; err != nil {
+	if err := r.db.Preload("Events").Where("unique_id = ?", uid).First(incident).Error; err != nil {
 		return nil, err
 	}
 
@@ -36,7 +36,7 @@ func (r *IncidentRepository) ReadIncident(uid string) (*models.Incident, error) 
 func (r *IncidentRepository) ListIncidents(opts ...utils.QueryOption) ([]*models.Incident, error) {
 	var incidents []*models.Incident
 
-	if err := r.db.Scopes(utils.Paginate(opts)).Find(&incidents).Error; err != nil {
+	if err := r.db.Scopes(utils.Paginate(opts)).Preload("Events").Find(&incidents).Error; err != nil {
 		return nil, err
 	}
 
@@ -46,7 +46,7 @@ func (r *IncidentRepository) ListIncidents(opts ...utils.QueryOption) ([]*models
 func (r *IncidentRepository) DeleteIncident(uid string) error {
 	incident := &models.Incident{}
 
-	if err := r.db.Where("unique_id = ?", uid).First(&incident).Error; err != nil {
+	if err := r.db.Where("unique_id = ?", uid).First(incident).Error; err != nil {
 		return err
 	}
 
