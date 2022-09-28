@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/porter-dev/porter-agent/internal/models"
+	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/pkg/event"
 	"k8s.io/client-go/kubernetes"
 
@@ -20,28 +22,11 @@ const (
 	IncidentSeverityWarning  IncidentSeverity = "warning"
 )
 
-// TODO: create incident API object
-type Incident struct {
-	Message string
-	Reason  string
-
-	Severity IncidentSeverity
-
-	IncidentEvents []IncidentEvent
-}
-
-type IncidentEvent struct {
-	Summary string
-	Detail  string
-
-	PodName      string
-	PodNamespace string
-}
-
 type IncidentDetector struct {
 	KubeClient  *kubernetes.Clientset
 	KubeVersion KubernetesVersion
 	EventStore  event.EventStore
+	Repository  repository.Repository
 }
 
 // DetectIncident returns an incident if one should be triggered, if there is no incident it will return
@@ -63,7 +48,7 @@ type IncidentDetector struct {
 // 4. Trigger an immediate alert and create a critical incident for the user.
 // 5. Query for past events from this pod. If the event has been triggered a certain number of times
 //    (configurable) in a certain time window (configurable), create a warning incident for the user.
-func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) (*Incident, error) {
+func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 	alertedEvents := make([]*event.FilteredEvent, 0)
 
 	for _, e := range es {
@@ -84,7 +69,7 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) (*Incident,
 	}
 
 	if len(alertedEvents) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	// at this point, populate the owner reference for the first alerted event - we assume that
@@ -92,39 +77,62 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) (*Incident,
 	err := alertedEvents[0].PopulateEventOwner(*d.KubeClient)
 
 	if err != nil {
-		return nil, err
+		return nil
 	}
 
-	switch strings.ToLower(alertedEvents[0].Owner.Kind) {
-	case "deployment":
-		fmt.Printf("determing if deployment %s is failing\n", alertedEvents[0].Owner.Name)
-		// if the deployment is in a failure state, create a high severity incident
-		if d.isDeploymentFailing(alertedEvents[0].Owner) {
-			// get event matches
-			matches := make(map[event.FilteredEvent]*EventMatch)
+	// get event matches
+	matches := make(map[event.FilteredEvent]*EventMatch)
 
-			for _, e := range alertedEvents {
-				matchCandidate := GetEventMatchFromEvent(d.KubeVersion, e)
+	for _, e := range alertedEvents {
+		matchCandidate := GetEventMatchFromEvent(d.KubeVersion, e)
 
-				if matchCandidate != nil {
-					matches[*e] = matchCandidate
+		if matchCandidate != nil {
+			matches[*e] = matchCandidate
+		}
+	}
+
+	// if the length of matches is not 0, we have a matched incident
+	if len(matches) != 0 {
+		switch strings.ToLower(alertedEvents[0].Owner.Kind) {
+		case "deployment":
+			fmt.Printf("determing if deployment %s is failing\n", alertedEvents[0].Owner.Name)
+
+			// if the deployment is in a failure state, create a high severity incident
+			if d.isDeploymentFailing(alertedEvents[0].Owner) {
+				incident := &models.Incident{
+					// Message:        "The deployment is failing!",
+					// Reason:         "Failing",
+					// Severity:       IncidentSeverityCritical,
+					// IncidentEvents: matchesToIncidentEvent(d.KubeVersion, matches),
 				}
+
+				return d.saveIncident(incident)
+			}
+		case "job":
+			// if the owner is a job, we always create a job-based incident as they typically run
+			// only once on Porter
+			incident := &models.Incident{
+				// Message:        "The deployment is failing!",
+				// Reason:         "Failing",
+				// Severity:       IncidentSeverityCritical,
+				// IncidentEvents: matchesToIncidentEvent(d.KubeVersion, matches),
 			}
 
-			return &Incident{
-				Message:        "The deployment is failing!",
-				Reason:         "Failing",
-				Severity:       IncidentSeverityCritical,
-				IncidentEvents: matchesToIncidentEvent(d.KubeVersion, matches),
-			}, nil
+			return d.saveIncident(incident)
 		}
-	case "job":
 
+		// if the controller cases did not match, we simply store a pod-based incident
+		incident := &models.Incident{
+			// Message:        "The deployment is failing!",
+			// Reason:         "Failing",
+			// Severity:       IncidentSeverityCritical,
+			// IncidentEvents: matchesToIncidentEvent(d.KubeVersion, matches),
+		}
+
+		return d.saveIncident(incident)
 	}
 
-	// otherwise query for past events, and determine if this should be alerted
-	// TODO: implement
-	return nil, nil
+	return nil
 }
 
 func (d *IncidentDetector) didPreventStartup(e *event.FilteredEvent) bool {
@@ -178,11 +186,11 @@ func getMaxUnavailable(deployment *appsv1.Deployment) int32 {
 	return int32(unavailable)
 }
 
-func matchesToIncidentEvent(k8sVersion KubernetesVersion, es map[event.FilteredEvent]*EventMatch) []IncidentEvent {
-	res := make([]IncidentEvent, 0)
+func matchesToIncidentEvent(k8sVersion KubernetesVersion, es map[event.FilteredEvent]*EventMatch) []models.IncidentEvent {
+	res := make([]models.IncidentEvent, 0)
 
 	for filteredEvent, match := range es {
-		res = append(res, IncidentEvent{
+		res = append(res, models.IncidentEvent{
 			Summary:      match.Summary,
 			Detail:       match.DetailGenerator(&filteredEvent),
 			PodName:      filteredEvent.PodName,
@@ -191,4 +199,29 @@ func matchesToIncidentEvent(k8sVersion KubernetesVersion, es map[event.FilteredE
 	}
 
 	return res
+}
+
+func (d *IncidentDetector) saveIncident(incident *models.Incident) error {
+	// if mergeWithMatchingIncident returns a non-nil incident, then we simply update the incident in the DB
+	if mergedIncident := d.mergeWithMatchingIncident(incident); mergedIncident != nil {
+		// TODO: switch this to update incident
+		_, err := d.Repository.Incident.UpdateIncident(mergedIncident)
+
+		return err
+	}
+
+	_, err := d.Repository.Incident.CreateIncident(incident)
+
+	return err
+}
+
+func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident) *models.Incident {
+	// we look for a matching incident - the matching incident should refer to the same
+	// release name and namespace, should be active, and the incident event should have
+	// a primary cause event with the same summary as the candidate incident.
+
+	// if a matching incident is found and currently refers to a pod, and the candidate incident
+	// refers to a different pod, this is promoted to a "deployment" incident.
+
+	return nil
 }

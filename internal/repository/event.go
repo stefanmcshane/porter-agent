@@ -15,7 +15,7 @@ func NewEventRepository(db *gorm.DB) *EventRepository {
 	return &EventRepository{db}
 }
 
-func (r *EventRepository) CreateEvent(event *models.Event) (*models.Event, error) {
+func (r *EventRepository) CreateEvent(event *models.IncidentEvent) (*models.IncidentEvent, error) {
 	if err := r.db.Create(event).Error; err != nil {
 		return nil, err
 	}
@@ -23,8 +23,8 @@ func (r *EventRepository) CreateEvent(event *models.Event) (*models.Event, error
 	return event, nil
 }
 
-func (r *EventRepository) ReadEvent(uid string) (*models.Event, error) {
-	event := &models.Event{}
+func (r *EventRepository) ReadEvent(uid string) (*models.IncidentEvent, error) {
+	event := &models.IncidentEvent{}
 
 	if err := r.db.Preload("Logs").Where("unique_id = ?", uid).First(event).Error; err != nil {
 		return nil, err
@@ -33,8 +33,8 @@ func (r *EventRepository) ReadEvent(uid string) (*models.Event, error) {
 	return event, nil
 }
 
-func (r *EventRepository) ListEvents(opts ...utils.QueryOption) ([]*models.Event, error) {
-	var events []*models.Event
+func (r *EventRepository) ListEvents(opts ...utils.QueryOption) ([]*models.IncidentEvent, error) {
+	var events []*models.IncidentEvent
 
 	if err := r.db.Scopes(utils.Paginate(opts)).Preload("Logs").Find(&events).Error; err != nil {
 		return nil, err
@@ -44,7 +44,7 @@ func (r *EventRepository) ListEvents(opts ...utils.QueryOption) ([]*models.Event
 }
 
 func (r *EventRepository) DeleteEvent(uid string) error {
-	event := &models.Event{}
+	event := &models.IncidentEvent{}
 
 	if err := r.db.Where("unique_id = ?", uid).First(event).Error; err != nil {
 		return err

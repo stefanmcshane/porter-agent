@@ -33,6 +33,15 @@ func (r *IncidentRepository) ReadIncident(uid string) (*models.Incident, error) 
 	return incident, nil
 }
 
+func (r *IncidentRepository) UpdateIncident(incident *models.Incident) (*models.Incident, error) {
+	// TODO: store incident events and make sure they're de-duped
+	if err := r.db.Save(incident).Error; err != nil {
+		return nil, err
+	}
+
+	return incident, nil
+}
+
 func (r *IncidentRepository) ListIncidents(opts ...utils.QueryOption) ([]*models.Incident, error) {
 	var incidents []*models.Incident
 

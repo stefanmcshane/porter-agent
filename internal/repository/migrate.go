@@ -14,7 +14,7 @@ func AutoMigrate(db *gorm.DB, debug bool) error {
 
 	return instanceDB.AutoMigrate(
 		&models.Incident{},
-		&models.Event{},
+		&models.IncidentEvent{},
 		&models.EventCache{},
 	)
 }
