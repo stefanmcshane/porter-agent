@@ -2,11 +2,14 @@ package main
 
 import (
 	"flag"
+	"log"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 
+	"gorm.io/gorm"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
@@ -16,8 +19,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/porter-dev/porter-agent/internal/models"
+	"github.com/porter-dev/porter/api/server/shared/config/env"
+
 	"github.com/gin-gonic/gin"
 	"github.com/porter-dev/porter-agent/controllers"
+	"github.com/porter-dev/porter-agent/internal/adapter"
 	"github.com/porter-dev/porter-agent/pkg/consumer"
 	"github.com/porter-dev/porter-agent/pkg/incident"
 	//+kubebuilder:scaffold:imports
@@ -93,6 +100,14 @@ func main() {
 
 	podController.Start()
 
+	db, err := adapter.New(&env.DBConf{})
+
+	if err != nil {
+		log.Fatalf("error opening connection to DB: %v\n", err)
+	}
+
+	go cleanupEventCache(db)
+
 	// for {
 	// 	pods, err := kubeClient.CoreV1().Pods("porter-agent-system").List(
 	// 		context.Background(), v1.ListOptions{
@@ -165,4 +180,22 @@ func main() {
 	// 	setupLog.Error(err, "problem running manager")
 	// 	os.Exit(1)
 	// }
+}
+
+func cleanupEventCache(db *gorm.DB) {
+	for {
+		var olderCache []*models.EventCache
+
+		if err := db.Model(&models.EventCache{}).Where("created_at > ?", time.Now().Add(-time.Hour)).Find(&olderCache).Error; err == nil {
+			for _, cache := range olderCache {
+				if err := db.Delete(cache).Error; err != nil {
+					log.Printf("error deleting old event cache with ID: %d. Error: %v\n", cache.ID, err)
+				}
+			}
+		} else {
+			log.Printf("error querying for older event cache DB entries: %v\n", err)
+		}
+
+		time.Sleep(time.Hour)
+	}
 }
