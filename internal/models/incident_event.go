@@ -1,12 +1,18 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type IncidentEvent struct {
 	gorm.Model
 
 	UniqueID   string `gorm:"unique"`
 	IncidentID uint
+
+	LastSeen *time.Time
 
 	// Each incident event corresponds to a single pod name and namespace.
 	PodName      string

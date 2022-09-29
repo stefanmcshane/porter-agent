@@ -1,12 +1,13 @@
 package incident
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter-agent/internal/repository"
+	"github.com/porter-dev/porter-agent/internal/utils"
 	"github.com/porter-dev/porter-agent/pkg/event"
 	"k8s.io/client-go/kubernetes"
 )
@@ -87,6 +88,7 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 		incidentEvents := matchesToIncidentEvent(d.KubeVersion, matches)
 		incident := getIncidentMetaFromEvent(alertedEvents[0])
 		incident.Events = incidentEvents
+		ownerRef := alertedEvents[0].Owner
 
 		switch strings.ToLower(alertedEvents[0].Owner.Kind) {
 		case "deployment":
@@ -98,14 +100,14 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 				incident.InvolvedObjectName = alertedEvents[0].Owner.Name
 				incident.InvolvedObjectNamespace = alertedEvents[0].Owner.Namespace
 
-				return d.saveIncident(incident)
+				return d.saveIncident(incident, ownerRef)
 			}
 		case "job":
 			incident.InvolvedObjectKind = models.InvolvedObjectJob
 			incident.InvolvedObjectName = alertedEvents[0].Owner.Name
 			incident.InvolvedObjectNamespace = alertedEvents[0].Owner.Namespace
 
-			return d.saveIncident(incident)
+			return d.saveIncident(incident, ownerRef)
 		}
 
 		// if the controller cases did not match, we simply store a pod-based incident
@@ -113,15 +115,15 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 		incident.InvolvedObjectName = alertedEvents[0].PodName
 		incident.InvolvedObjectNamespace = alertedEvents[0].PodNamespace
 
-		return d.saveIncident(incident)
+		return d.saveIncident(incident, ownerRef)
 	}
 
 	return nil
 }
 
-func (d *IncidentDetector) saveIncident(incident *models.Incident) error {
+func (d *IncidentDetector) saveIncident(incident *models.Incident, ownerRef *event.EventOwner) error {
 	// if mergeWithMatchingIncident returns a non-nil incident, then we simply update the incident in the DB
-	if mergedIncident := d.mergeWithMatchingIncident(incident); mergedIncident != nil {
+	if mergedIncident := d.mergeWithMatchingIncident(incident, ownerRef); mergedIncident != nil {
 		_, err := d.Repository.Incident.UpdateIncident(mergedIncident)
 
 		return err
@@ -132,16 +134,94 @@ func (d *IncidentDetector) saveIncident(incident *models.Incident) error {
 	return err
 }
 
-func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident) *models.Incident {
+func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, ownerRef *event.EventOwner) *models.Incident {
 	// we look for a matching incident - the matching incident should refer to the same
 	// release name and namespace, should be active, and the incident event should have
 	// a primary cause event with the same summary as the candidate incident.
+	statusActive := models.IncidentStatusActive
 
-	// if a matching incident is found and currently refers to a pod, and the candidate incident
-	// refers to a different pod, this is promoted to a "deployment" incident.
-	incidentBytes, _ := json.Marshal(incident)
+	candidateMatches, err := d.Repository.Incident.ListIncidents(&utils.ListIncidentsFilter{
+		Status:           &statusActive,
+		ReleaseName:      &incident.ReleaseName,
+		ReleaseNamespace: &incident.ReleaseNamespace,
+	})
 
-	fmt.Println(string(incidentBytes))
+	if err != nil {
+		return nil
+	}
+
+	var primaryCauseSummary string
+
+	for _, currIncidentEvent := range incident.Events {
+		if currIncidentEvent.IsPrimaryCause {
+			primaryCauseSummary = currIncidentEvent.Summary
+			break
+		}
+	}
+
+	for _, candidateMatch := range candidateMatches {
+		for _, candidateMatchEvent := range candidateMatch.Events {
+			if candidateMatchEvent.IsPrimaryCause && candidateMatchEvent.Summary == primaryCauseSummary {
+				// in this case, we've found a match, and we merge and return
+				now := time.Now()
+				candidateMatch.LastSeen = &now
+				margedEvents := mergeEvents(candidateMatch.Events, incident.Events)
+				candidateMatch.Events = margedEvents
+
+				// if there are different pods listed in the events, we promote this to a "Deployment" event
+				if numDistinctPods(margedEvents) > 1 {
+					candidateMatch.InvolvedObjectKind = models.InvolvedObjectKind(ownerRef.Kind)
+					candidateMatch.InvolvedObjectName = ownerRef.Name
+					candidateMatch.InvolvedObjectNamespace = ownerRef.Namespace
+				}
+
+				return candidateMatch
+			}
+		}
+	}
 
 	return nil
+}
+
+func mergeEvents(events1, events2 []models.IncidentEvent) []models.IncidentEvent {
+	// we construct a key for events1 by looking at the pod name, namespace, primary cause, and
+	// summary fields
+	keyMap := make(map[string]models.IncidentEvent)
+
+	for _, e1 := range events1 {
+		keyMap[fmt.Sprintf("%s/%s-%v-%s", e1.PodName, e1.PodNamespace, e1.IsPrimaryCause, e1.Summary)] = e1
+	}
+
+	// any matched events are updated, other events are appended
+	now := time.Now()
+
+	for _, e2 := range events2 {
+		key := fmt.Sprintf("%s/%s-%v-%s", e2.PodName, e2.PodNamespace, e2.IsPrimaryCause, e2.Summary)
+
+		if e1, exists := keyMap[key]; exists {
+			e1.LastSeen = &now
+			e1.Detail = e2.Detail
+		} else {
+			keyMap[key] = e2
+		}
+	}
+
+	res := make([]models.IncidentEvent, 0)
+
+	for _, e := range keyMap {
+		res = append(res, e)
+	}
+
+	return res
+}
+
+func numDistinctPods(events []models.IncidentEvent) int {
+	podMap := make(map[string]string)
+
+	for _, e := range events {
+		key := fmt.Sprintf("%s/%s", e.PodNamespace, e.PodName)
+		podMap[key] = key
+	}
+
+	return len(podMap)
 }
