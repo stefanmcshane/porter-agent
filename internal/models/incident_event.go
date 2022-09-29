@@ -5,7 +5,8 @@ import "gorm.io/gorm"
 type IncidentEvent struct {
 	gorm.Model
 
-	UniqueID string `gorm:"unique"`
+	UniqueID   string `gorm:"unique"`
+	IncidentID uint
 
 	// Each incident event corresponds to a single pod name and namespace.
 	PodName      string

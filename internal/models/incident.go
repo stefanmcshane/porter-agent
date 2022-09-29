@@ -49,3 +49,11 @@ type Incident struct {
 
 	Events []IncidentEvent
 }
+
+func NewIncident() *Incident {
+	randStr, _ := GenerateRandomBytes(16)
+
+	return &Incident{
+		UniqueID: randStr,
+	}
+}

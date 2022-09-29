@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -85,19 +84,11 @@ func (e *EventController) processEvent(k8sEvent *v1.Event) error {
 	es := []*event.FilteredEvent{filteredEvent}
 
 	// trigger incident detection loop
-	incident, err := e.IncidentDetector.DetectIncident(es)
+	err := e.IncidentDetector.DetectIncident(es)
 
 	if err != nil {
 		return e.updateEventCache(k8sEvent, err)
 	}
-
-	incidentBytes, err := json.Marshal(incident)
-
-	if err != nil {
-		return e.updateEventCache(k8sEvent, err)
-	}
-
-	fmt.Println(string(incidentBytes))
 
 	return e.updateEventCache(k8sEvent, nil)
 }

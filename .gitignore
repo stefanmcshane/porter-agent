@@ -55,7 +55,8 @@ testbin/*
 .LSOverride
 
 # Icon must end with two \r
-Icon
+Icon
+
 
 # Thumbnails
 ._*
@@ -99,3 +100,5 @@ tags
 
 # End of https://www.toptal.com/developers/gitignore/api/vim,macos,go
 n
+
+*.db

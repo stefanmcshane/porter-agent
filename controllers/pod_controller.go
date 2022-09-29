@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -68,19 +67,11 @@ func (p *PodController) processPod(pod *v1.Pod) error {
 	es := event.NewFilteredEventsFromPod(pod)
 
 	// trigger incident detection loop
-	incident, err := p.IncidentDetector.DetectIncident(es)
+	err := p.IncidentDetector.DetectIncident(es)
 
 	if err != nil {
 		return err
 	}
-
-	incidentBytes, err := json.Marshal(incident)
-
-	if err != nil {
-		return err
-	}
-
-	fmt.Println(string(incidentBytes))
 
 	return nil
 }

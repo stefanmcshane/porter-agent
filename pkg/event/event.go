@@ -49,6 +49,11 @@ type FilteredEvent struct {
 
 	// (optional) The owner data, if applicable or present
 	Owner *EventOwner
+
+	// (optional) The release data, if applicable or present
+	ReleaseName  string
+	ChartName    string
+	ChartVersion string
 }
 
 type EventOwner struct {
@@ -81,6 +86,10 @@ func (e *FilteredEvent) PopulatePodData(k8sClient kubernetes.Clientset) error {
 }
 
 func (e *FilteredEvent) PopulateEventOwner(k8sClient kubernetes.Clientset) error {
+	if e.Owner != nil {
+		return nil
+	}
+
 	// determine if pod is owned by a ReplicaSet or Job
 	if e.Pod == nil {
 		err := e.PopulatePodData(k8sClient)
@@ -130,6 +139,54 @@ func (e *FilteredEvent) PopulateEventOwner(k8sClient kubernetes.Clientset) error
 	}
 
 	return fmt.Errorf("unsupported owner reference kind")
+}
+
+func (e *FilteredEvent) Populate(k8sClient kubernetes.Clientset) error {
+	// populate the event owner
+	if err := e.PopulateEventOwner(k8sClient); err != nil {
+		return err
+	}
+
+	e.ReleaseName = e.Pod.Labels["app.kubernetes.io/instance"]
+
+	// query the owner reference to determine chart name
+	var chartLabel string
+
+	switch strings.ToLower(e.Owner.Kind) {
+	case "deployment":
+		depl, err := k8sClient.AppsV1().Deployments(e.Owner.Namespace).Get(
+			context.Background(),
+			e.Owner.Name,
+			metav1.GetOptions{},
+		)
+
+		if err != nil {
+			return err
+		}
+
+		chartLabel = depl.Labels["helm.sh/chart"]
+	case "job":
+		job, err := k8sClient.BatchV1().Jobs(e.Owner.Namespace).Get(
+			context.Background(),
+			e.Owner.Name,
+			metav1.GetOptions{},
+		)
+
+		if err != nil {
+			return err
+		}
+
+		chartLabel = job.Labels["helm.sh/chart"]
+	}
+
+	if spl := strings.Split(chartLabel, "-"); len(spl) == 2 {
+		e.ChartName = spl[0]
+		e.ChartVersion = spl[1]
+	} else {
+		e.ChartName = chartLabel
+	}
+
+	return nil
 }
 
 type EventStore interface {
