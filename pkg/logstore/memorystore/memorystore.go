@@ -82,11 +82,9 @@ func (store *MemoryStore) Stream(w logstore.Writer, stopCh <-chan struct{}) erro
 		}
 	}(t)
 
-	go func(t *tail.Tail) {
-		<-stopCh
-		t.Cleanup()
-		t.Stop()
-	}(t)
+	<-stopCh
+	t.Cleanup()
+	t.Stop()
 
 	return nil
 }
