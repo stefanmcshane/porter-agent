@@ -122,7 +122,6 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 func (d *IncidentDetector) saveIncident(incident *models.Incident) error {
 	// if mergeWithMatchingIncident returns a non-nil incident, then we simply update the incident in the DB
 	if mergedIncident := d.mergeWithMatchingIncident(incident); mergedIncident != nil {
-		// TODO: switch this to update incident
 		_, err := d.Repository.Incident.UpdateIncident(mergedIncident)
 
 		return err

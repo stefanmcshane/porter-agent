@@ -6,6 +6,7 @@ import (
 
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter-agent/internal/repository"
+	"github.com/porter-dev/porter-agent/internal/utils"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -32,9 +33,13 @@ const CRITICAL_BUFFER_MINUTES = 6
 
 func (r *IncidentResolver) Run() error {
 	// get all active incidents
-	// TODO: add active filter
 	// TODO: pagination
-	activeIncidents, err := r.Repository.Incident.ListIncidents()
+
+	statusActive := models.IncidentStatusActive
+
+	activeIncidents, err := r.Repository.Incident.ListIncidents(&utils.ListIncidentsFilter{
+		Status: &statusActive,
+	})
 
 	if err != nil {
 		return err
@@ -60,9 +65,9 @@ func (r *IncidentResolver) handleResolved(incident *models.Incident) error {
 	incident.ResolvedTime = &resolvedTime
 	incident.IncidentStatus = models.IncidentStatusResolved
 
-	// TODO: update the incident and trigger the alerter
+	_, err := r.Repository.Incident.UpdateIncident(incident)
 
-	return nil
+	return err
 }
 
 func (r *IncidentResolver) isResolved(incident *models.Incident) bool {
