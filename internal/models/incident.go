@@ -34,6 +34,9 @@ type Incident struct {
 	UniqueID string `gorm:"unique"`
 
 	LastAlerted *time.Time
+	LastSeen    *time.Time
+
+	ResolvedTime *time.Time
 
 	IncidentStatus IncidentStatus
 

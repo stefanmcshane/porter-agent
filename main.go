@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/porter-dev/porter-agent/internal/adapter"
 	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/pkg/incident"
+	"github.com/porter-dev/porter-agent/pkg/pulsar"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -110,6 +112,26 @@ func main() {
 		KubeVersion: incident.KubernetesVersion_1_20,
 		Repository:  repo,
 	}
+
+	resolver := &incident.IncidentResolver{
+		KubeClient: kubeClient,
+		// TODO: don't hardcode to 1.20
+		KubeVersion: incident.KubernetesVersion_1_20,
+		Repository:  repo,
+	}
+
+	// trigger resolver through pulsar
+	go func() {
+		p := pulsar.NewPulsar(1, time.Minute) // pulse every 1 minute
+
+		for range p.Pulsate() {
+			err := resolver.Run()
+
+			if err != nil {
+				fmt.Println("pulsar error:", err)
+			}
+		}
+	}()
 
 	// eventController := controllers.EventController{
 	// 	KubeClient: kubeClient,
