@@ -186,7 +186,7 @@ func cleanupEventCache(db *gorm.DB) {
 	for {
 		var olderCache []*models.EventCache
 
-		if err := db.Model(&models.EventCache{}).Where("created_at > ?", time.Now().Add(-time.Hour)).Find(&olderCache).Error; err == nil {
+		if err := db.Model(&models.EventCache{}).Where("timestamp <= ?", time.Now().Add(-time.Hour)).Find(&olderCache).Error; err == nil {
 			for _, cache := range olderCache {
 				if err := db.Delete(cache).Error; err != nil {
 					log.Printf("error deleting old event cache with ID: %d. Error: %v\n", cache.ID, err)
