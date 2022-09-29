@@ -6,16 +6,16 @@ import (
 	"gorm.io/gorm"
 )
 
-type EventRepository struct {
+type IncidentEventRepository struct {
 	db *gorm.DB
 }
 
-// NewEventRepository returns pointer to repo along with the db
-func NewEventRepository(db *gorm.DB) *EventRepository {
-	return &EventRepository{db}
+// NewIncidentEventRepository returns pointer to repo along with the db
+func NewIncidentEventRepository(db *gorm.DB) *IncidentEventRepository {
+	return &IncidentEventRepository{db}
 }
 
-func (r *EventRepository) CreateEvent(event *models.IncidentEvent) (*models.IncidentEvent, error) {
+func (r *IncidentEventRepository) CreateEvent(event *models.IncidentEvent) (*models.IncidentEvent, error) {
 	if err := r.db.Create(event).Error; err != nil {
 		return nil, err
 	}
@@ -23,17 +23,17 @@ func (r *EventRepository) CreateEvent(event *models.IncidentEvent) (*models.Inci
 	return event, nil
 }
 
-func (r *EventRepository) ReadEvent(uid string) (*models.IncidentEvent, error) {
+func (r *IncidentEventRepository) ReadEvent(uid string) (*models.IncidentEvent, error) {
 	event := &models.IncidentEvent{}
 
-	if err := r.db.Preload("Logs").Where("unique_id = ?", uid).First(event).Error; err != nil {
+	if err := r.db.Where("unique_id = ?", uid).First(event).Error; err != nil {
 		return nil, err
 	}
 
 	return event, nil
 }
 
-func (r *EventRepository) ListEvents(filter *utils.ListIncidentEventsFilter, opts ...utils.QueryOption) ([]*models.IncidentEvent, error) {
+func (r *IncidentEventRepository) ListEvents(filter *utils.ListIncidentEventsFilter, opts ...utils.QueryOption) ([]*models.IncidentEvent, error) {
 	var events []*models.IncidentEvent
 
 	db := r.db.Scopes(utils.Paginate(opts))
@@ -65,7 +65,7 @@ func (r *EventRepository) ListEvents(filter *utils.ListIncidentEventsFilter, opt
 	return events, nil
 }
 
-func (r *EventRepository) DeleteEvent(uid string) error {
+func (r *IncidentEventRepository) DeleteEvent(uid string) error {
 	event := &models.IncidentEvent{}
 
 	if err := r.db.Where("unique_id = ?", uid).First(event).Error; err != nil {
