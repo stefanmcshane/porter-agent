@@ -14,7 +14,6 @@ import (
 type MemoryStore struct {
 	name     string
 	location string
-	t        *tail.Tail
 }
 
 type Options struct {
@@ -61,34 +60,33 @@ func New(name string, options Options) (*MemoryStore, error) {
 		return nil, err
 	}
 
-	logFilePath := store.location
-	t, err := tail.TailFile(logFilePath, tail.Config{Follow: true})
-
-	if err != nil {
-		return nil, fmt.Errorf("error initializing memory store with name %s. Error: %w", store.name, err)
-	}
-
-	store.t = t
 	return store, nil
 }
 
-func (store *MemoryStore) Stream(w logstore.Writer) {
-	for line := range store.t.Lines {
-		if strings.TrimSpace(line.Text) == "" {
-			continue
-		}
+func (store *MemoryStore) Stream(w logstore.Writer, stopCh <-chan struct{}) error {
+	logFilePath := store.location
 
-		w.Write(line.Text)
-	}
-}
-
-func (store *MemoryStore) Stop() error {
-	store.t.Cleanup()
-	err := store.t.Stop()
+	t, err := tail.TailFile(logFilePath, tail.Config{Follow: true, Poll: true})
 
 	if err != nil {
-		return fmt.Errorf("error stopping memory stream with name %s. Error: %w", store.name, err)
+		return fmt.Errorf("error streaming memory store with name %s. Error: %w", store.name, err)
 	}
+
+	go func(t *tail.Tail) {
+		for line := range t.Lines {
+			if strings.TrimSpace(line.Text) == "" || line.Err != nil {
+				continue
+			}
+
+			w.Write(line.Text)
+		}
+	}(t)
+
+	go func(t *tail.Tail) {
+		<-stopCh
+		t.Cleanup()
+		t.Stop()
+	}(t)
 
 	return nil
 }
