@@ -26,7 +26,7 @@ func isDeploymentFailing(kubeClient *kubernetes.Clientset, deplNamespace, deplNa
 	if err != nil {
 		// TODO: this case should trigger a warning, as it indicates an invalid configuration for
 		// the agent
-		return false
+		return true
 	}
 
 	// determine if the deployment has an appropriate number of ready replicas
@@ -58,8 +58,11 @@ func matchesToIncidentEvent(k8sVersion KubernetesVersion, es map[event.FilteredE
 	res := make([]models.IncidentEvent, 0)
 
 	for filteredEvent, match := range es {
+		uid, _ := models.GenerateRandomBytes(16)
+
 		res = append(res, models.IncidentEvent{
-			Summary:        match.Summary,
+			UniqueID:       uid,
+			Summary:        string(match.Summary),
 			Detail:         match.DetailGenerator(&filteredEvent),
 			PodName:        filteredEvent.PodName,
 			PodNamespace:   filteredEvent.PodNamespace,
@@ -74,6 +77,7 @@ func getIncidentMetaFromEvent(e *event.FilteredEvent) *models.Incident {
 	res := models.NewIncident()
 
 	res.IncidentStatus = models.IncidentStatusActive
+	res.LastSeen = e.Timestamp
 	res.ReleaseName = e.ReleaseName
 	res.ReleaseNamespace = e.Owner.Namespace
 	res.ChartName = e.ChartName

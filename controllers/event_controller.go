@@ -3,7 +3,10 @@ package controllers
 import (
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/porter-dev/porter-agent/internal/models"
+	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/pkg/event"
 	"github.com/porter-dev/porter-agent/pkg/incident"
 	v1 "k8s.io/api/core/v1"
@@ -21,6 +24,7 @@ type EventController struct {
 	KubeVersion      incident.KubernetesVersion
 	EventStore       event.EventStore
 	IncidentDetector *incident.IncidentDetector
+	Repository       *repository.Repository
 }
 
 type AuthError struct{}
@@ -74,6 +78,7 @@ func (e *EventController) processEvent(k8sEvent *v1.Event) error {
 	// TODO: de-duplicate events which have already been stored/processed based
 	// on both the timestamp and the event ID
 	if e.hasBeenProcessed(k8sEvent) {
+		fmt.Printf("skipping event %s as it has already been processed\n", k8sEvent.Name)
 		return nil
 	}
 
@@ -94,15 +99,28 @@ func (e *EventController) processEvent(k8sEvent *v1.Event) error {
 }
 
 func (e *EventController) hasBeenProcessed(k8sEvent *v1.Event) bool {
-	// TODO: query the event cache
-	return false
+	caches, err := e.Repository.EventCache.ListEventCachesForEvent(getEventCacheID(k8sEvent))
+
+	return err == nil && len(caches) > 0
 }
 
 func (e *EventController) updateEventCache(k8sEvent *v1.Event, currError error) error {
-	// TODO: update the event cache
+	now := time.Now()
+
+	e.Repository.EventCache.CreateEventCache(&models.EventCache{
+		EventUID:     getEventCacheID(k8sEvent),
+		PodName:      k8sEvent.InvolvedObject.Name,
+		PodNamespace: k8sEvent.InvolvedObject.Namespace,
+		Timestamp:    &now,
+	})
+
 	return currError
 }
 
 func (e *EventController) processDeleteEvent(obj interface{}) {
 	// TODO: remove from event cache
+}
+
+func getEventCacheID(k8sEvent *v1.Event) string {
+	return fmt.Sprintf("%v-%s-%s-%s", k8sEvent.UID, k8sEvent.Name, k8sEvent.Namespace, k8sEvent.InvolvedObject.Name)
 }

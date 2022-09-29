@@ -8,15 +8,9 @@ import (
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/internal/utils"
+	"github.com/porter-dev/porter-agent/pkg/alerter"
 	"github.com/porter-dev/porter-agent/pkg/event"
 	"k8s.io/client-go/kubernetes"
-)
-
-type IncidentSeverity string
-
-const (
-	IncidentSeverityCritical IncidentSeverity = "critical"
-	IncidentSeverityWarning  IncidentSeverity = "warning"
 )
 
 type IncidentDetector struct {
@@ -24,6 +18,7 @@ type IncidentDetector struct {
 	KubeVersion KubernetesVersion
 	EventStore  event.EventStore
 	Repository  *repository.Repository
+	Alerter     *alerter.Alerter
 }
 
 // DetectIncident returns an incident if one should be triggered, if there is no incident it will return
@@ -71,51 +66,84 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 		return nil
 	}
 
+	// populate all other alerted events with the same data
+	for i := range alertedEvents {
+		alertedEvents[i].Pod = alertedEvents[0].Pod
+		alertedEvents[i].Owner = alertedEvents[0].Owner
+		alertedEvents[i].ReleaseName = alertedEvents[0].ReleaseName
+		alertedEvents[i].ChartName = alertedEvents[0].ChartName
+		alertedEvents[i].ChartVersion = alertedEvents[0].ChartVersion
+	}
+
 	// get event matches
 	matches := make(map[event.FilteredEvent]*EventMatch)
 
 	for _, e := range alertedEvents {
-		matchCandidate := GetEventMatchFromEvent(d.KubeVersion, e)
+		matchCandidate := GetEventMatchFromEvent(d.KubeVersion, d.KubeClient, e)
 
-		if matchCandidate != nil {
+		// we only add match candidates which have a primary cause at the moment
+		if matchCandidate != nil && matchCandidate.IsPrimaryCause {
 			matches[*e] = matchCandidate
 		}
 	}
 
-	// if the length of matches is not 0, we have a matched incident
-	if len(matches) != 0 {
-		// construct the basic incident event model
-		incidentEvents := matchesToIncidentEvent(d.KubeVersion, matches)
-		incident := getIncidentMetaFromEvent(alertedEvents[0])
-		incident.Events = incidentEvents
-		ownerRef := alertedEvents[0].Owner
+	fmt.Println("LENGTH OF MATCHES IS", len(matches))
 
-		switch strings.ToLower(alertedEvents[0].Owner.Kind) {
+	// iterate through incident events
+	for alertedEvent, match := range matches {
+		// construct the basic incident event model
+		incident := getIncidentMetaFromEvent(&alertedEvent)
+		incident.Events = matchesToIncidentEvent(d.KubeVersion, map[event.FilteredEvent]*EventMatch{
+			alertedEvent: match,
+		})
+
+		ownerRef := alertedEvent.Owner
+
+		switch strings.ToLower(ownerRef.Kind) {
 		case "deployment":
-			fmt.Printf("determing if deployment %s is failing\n", alertedEvents[0].Owner.Name)
+			fmt.Printf("determing if deployment %s is failing\n", ownerRef.Name)
 
 			// if the deployment is in a failure state, create a high severity incident
-			if isDeploymentFailing(d.KubeClient, alertedEvents[0].Owner.Namespace, alertedEvents[0].Owner.Name) {
+			if isDeploymentFailing(d.KubeClient, ownerRef.Namespace, ownerRef.Name) {
+				incident.Severity = models.SeverityCritical
 				incident.InvolvedObjectKind = models.InvolvedObjectDeployment
-				incident.InvolvedObjectName = alertedEvents[0].Owner.Name
-				incident.InvolvedObjectNamespace = alertedEvents[0].Owner.Namespace
+				incident.InvolvedObjectName = ownerRef.Name
+				incident.InvolvedObjectNamespace = ownerRef.Namespace
 
-				return d.saveIncident(incident, ownerRef)
+				err := d.saveIncident(incident, ownerRef)
+
+				if err != nil {
+					return err
+				}
+
+				continue
 			}
 		case "job":
+			incident.Severity = models.SeverityNormal
 			incident.InvolvedObjectKind = models.InvolvedObjectJob
-			incident.InvolvedObjectName = alertedEvents[0].Owner.Name
-			incident.InvolvedObjectNamespace = alertedEvents[0].Owner.Namespace
+			incident.InvolvedObjectName = ownerRef.Name
+			incident.InvolvedObjectNamespace = ownerRef.Namespace
 
-			return d.saveIncident(incident, ownerRef)
+			err := d.saveIncident(incident, ownerRef)
+
+			if err != nil {
+				return err
+			}
+
+			continue
 		}
 
 		// if the controller cases did not match, we simply store a pod-based incident
+		incident.Severity = models.SeverityNormal
 		incident.InvolvedObjectKind = models.InvolvedObjectPod
-		incident.InvolvedObjectName = alertedEvents[0].PodName
-		incident.InvolvedObjectNamespace = alertedEvents[0].PodNamespace
+		incident.InvolvedObjectName = alertedEvent.PodName
+		incident.InvolvedObjectNamespace = alertedEvent.PodNamespace
 
-		return d.saveIncident(incident, ownerRef)
+		err := d.saveIncident(incident, ownerRef)
+
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -124,14 +152,27 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 func (d *IncidentDetector) saveIncident(incident *models.Incident, ownerRef *event.EventOwner) error {
 	// if mergeWithMatchingIncident returns a non-nil incident, then we simply update the incident in the DB
 	if mergedIncident := d.mergeWithMatchingIncident(incident, ownerRef); mergedIncident != nil {
-		_, err := d.Repository.Incident.UpdateIncident(mergedIncident)
+		matchedIncidentID := mergedIncident.ID
+		incident, err := d.Repository.Incident.UpdateIncident(mergedIncident)
 
+		if err != nil {
+			return err
+		}
+
+		fmt.Println("INCIDENTS MATCHED:", matchedIncidentID, incident.ID)
+
+		return d.Alerter.HandleIncident(incident)
+	}
+
+	fmt.Println("CREATING NEW INCIDENT")
+
+	incident, err := d.Repository.Incident.CreateIncident(incident)
+
+	if err != nil {
 		return err
 	}
 
-	_, err := d.Repository.Incident.CreateIncident(incident)
-
-	return err
+	return d.Alerter.HandleIncident(incident)
 }
 
 func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, ownerRef *event.EventOwner) *models.Incident {
@@ -162,14 +203,15 @@ func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, 
 	for _, candidateMatch := range candidateMatches {
 		for _, candidateMatchEvent := range candidateMatch.Events {
 			if candidateMatchEvent.IsPrimaryCause && candidateMatchEvent.Summary == primaryCauseSummary {
+				fmt.Println("GOT MATCHING INCIDENT", candidateMatch)
+
 				// in this case, we've found a match, and we merge and return
-				now := time.Now()
-				candidateMatch.LastSeen = &now
-				margedEvents := mergeEvents(candidateMatch.Events, incident.Events)
-				candidateMatch.Events = margedEvents
+				candidateMatch.LastSeen = incident.LastSeen
+				mergedEvents := mergeEvents(candidateMatch.Events, incident.Events)
+				candidateMatch.Events = mergedEvents
 
 				// if there are different pods listed in the events, we promote this to a "Deployment" event
-				if numDistinctPods(margedEvents) > 1 {
+				if numDistinctPods(mergedEvents) > 1 {
 					candidateMatch.InvolvedObjectKind = models.InvolvedObjectKind(ownerRef.Kind)
 					candidateMatch.InvolvedObjectName = ownerRef.Name
 					candidateMatch.InvolvedObjectNamespace = ownerRef.Namespace

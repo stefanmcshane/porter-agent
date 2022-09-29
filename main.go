@@ -28,6 +28,8 @@ import (
 	"github.com/porter-dev/porter-agent/controllers"
 	"github.com/porter-dev/porter-agent/internal/adapter"
 	"github.com/porter-dev/porter-agent/internal/repository"
+	"github.com/porter-dev/porter-agent/pkg/alerter"
+	"github.com/porter-dev/porter-agent/pkg/httpclient"
 	"github.com/porter-dev/porter-agent/pkg/incident"
 	"github.com/porter-dev/porter-agent/pkg/pulsar"
 	//+kubebuilder:scaffold:imports
@@ -87,6 +89,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	client := httpclient.NewClient()
+
 	// create database connection through adapter
 	db, err := adapter.New(&envDecoderConf.DBConf)
 
@@ -106,11 +110,17 @@ func main() {
 
 	kubeClient := kubernetes.NewForConfigOrDie(mgr.GetConfig())
 
+	alerter := &alerter.Alerter{
+		Client:     client,
+		Repository: repo,
+	}
+
 	detector := &incident.IncidentDetector{
 		KubeClient: kubeClient,
 		// TODO: don't hardcode to 1.20
 		KubeVersion: incident.KubernetesVersion_1_20,
 		Repository:  repo,
+		Alerter:     alerter,
 	}
 
 	resolver := &incident.IncidentResolver{
@@ -118,6 +128,7 @@ func main() {
 		// TODO: don't hardcode to 1.20
 		KubeVersion: incident.KubernetesVersion_1_20,
 		Repository:  repo,
+		Alerter:     alerter,
 	}
 
 	// trigger resolver through pulsar
@@ -133,14 +144,15 @@ func main() {
 		}
 	}()
 
-	// eventController := controllers.EventController{
-	// 	KubeClient: kubeClient,
-	// 	// TODO: don't hardcode to 1.20
-	// 	KubeVersion:      incident.KubernetesVersion_1_20,
-	// 	IncidentDetector: detector,
-	// }
+	eventController := controllers.EventController{
+		KubeClient: kubeClient,
+		// TODO: don't hardcode to 1.20
+		KubeVersion:      incident.KubernetesVersion_1_20,
+		IncidentDetector: detector,
+		Repository:       repo,
+	}
 
-	// eventController.Start()
+	go eventController.Start()
 
 	podController := controllers.PodController{
 		KubeClient: kubeClient,

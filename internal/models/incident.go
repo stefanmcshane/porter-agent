@@ -3,6 +3,7 @@ package models
 import (
 	"time"
 
+	"github.com/porter-dev/porter-agent/api/server/types"
 	"gorm.io/gorm"
 )
 
@@ -58,5 +59,19 @@ func NewIncident() *Incident {
 
 	return &Incident{
 		UniqueID: randStr,
+	}
+}
+
+func (i *Incident) ToAPIType() *types.Incident {
+	return &types.Incident{
+		ID:               i.UniqueID,
+		ReleaseName:      i.ReleaseName,
+		ReleaseNamespace: i.ReleaseNamespace,
+		UpdatedAt:        i.UpdatedAt.Unix(),
+		CreatedAt:        i.CreatedAt.Unix(),
+		ChartName:        i.ChartName,
+		LatestState:      string(i.IncidentStatus),
+		LatestReason:     i.Events[0].Summary,
+		LatestMessage:    i.Events[0].Detail,
 	}
 }

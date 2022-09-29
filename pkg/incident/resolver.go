@@ -7,6 +7,7 @@ import (
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/internal/utils"
+	"github.com/porter-dev/porter-agent/pkg/alerter"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -14,6 +15,7 @@ type IncidentResolver struct {
 	KubeClient  *kubernetes.Clientset
 	KubeVersion KubernetesVersion
 	Repository  *repository.Repository
+	Alerter     *alerter.Alerter
 }
 
 // INCIDENT_REPEAT_BUFFER_HOURS are the number of hours we provide as buffer to determine whether the issue
@@ -24,8 +26,9 @@ type IncidentResolver struct {
 // immediately resolve the incident once the pod is removed or restarts in a healthy state. We will wait for 24 hours
 // until we see this incident occur again.
 //
-// This value may be made configurable in the future for different alerting configurations.
-const INCIDENT_REPEAT_BUFFER_HOURS = 24
+// This value may be made configurable in the future for different alerting configurations. We make this 23 hours
+// as email digests for warning incidents may be sent out daily.
+const INCIDENT_REPEAT_BUFFER_HOURS = 23
 
 // CRITICAL_BUFFER_MINUTES are the number of minutes we provide as grace period to check whether or not a
 // critical incident has been resolved
@@ -46,7 +49,7 @@ func (r *IncidentResolver) Run() error {
 	}
 
 	for _, activeIncident := range activeIncidents {
-		fmt.Printf("checking whether incident %s is resolved", activeIncident.UniqueID)
+		fmt.Printf("checking whether incident %s is resolved\n", activeIncident.UniqueID)
 
 		if r.isResolved(activeIncident) {
 			fmt.Println("the incident was resolved!")
@@ -67,7 +70,11 @@ func (r *IncidentResolver) handleResolved(incident *models.Incident) error {
 
 	_, err := r.Repository.Incident.UpdateIncident(incident)
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	return r.Alerter.HandleResolved(incident)
 }
 
 func (r *IncidentResolver) isResolved(incident *models.Incident) bool {
