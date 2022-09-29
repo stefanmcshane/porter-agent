@@ -10,6 +10,7 @@ const (
 type Query struct {
 	Limit  int
 	Offset int
+	SortBy string
 	Order  Ordering
 }
 
@@ -45,4 +46,14 @@ type withOrder Ordering
 
 func (w withOrder) Apply(q *Query) {
 	q.Order = Ordering(w)
+}
+
+func WithSortBy(sortBy string) QueryOption {
+	return withSortBy(sortBy)
+}
+
+type withSortBy string
+
+func (w withSortBy) Apply(q *Query) {
+	q.SortBy = string(w)
 }
