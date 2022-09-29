@@ -33,10 +33,32 @@ func (r *EventRepository) ReadEvent(uid string) (*models.IncidentEvent, error) {
 	return event, nil
 }
 
-func (r *EventRepository) ListEvents(opts ...utils.QueryOption) ([]*models.IncidentEvent, error) {
+func (r *EventRepository) ListEvents(filter *utils.ListIncidentEventsFilter, opts ...utils.QueryOption) ([]*models.IncidentEvent, error) {
 	var events []*models.IncidentEvent
 
-	if err := r.db.Scopes(utils.Paginate(opts)).Preload("Logs").Find(&events).Error; err != nil {
+	db := r.db.Scopes(utils.Paginate(opts))
+
+	if filter.IncidentID != nil {
+		db = db.Where("incident_id = ?", *filter.IncidentID)
+	}
+
+	if filter.PodName != nil {
+		db = db.Where("pod_name = ?", *filter.PodName)
+	}
+
+	if filter.PodNamespace != nil {
+		db = db.Where("pod_namespace = ?", *filter.PodNamespace)
+	}
+
+	if filter.Summary != nil {
+		db = db.Where("summary = ?", *filter.Summary)
+	}
+
+	if filter.IsPrimaryCause != nil {
+		db = db.Where("is_primary_cause = ?", *filter.IsPrimaryCause)
+	}
+
+	if err := db.Find(&events).Error; err != nil {
 		return nil, err
 	}
 
