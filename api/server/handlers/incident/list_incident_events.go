@@ -36,7 +36,7 @@ func (h ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	events, paginatedResult, err := h.repo.Event.ListEvents(
+	events, paginatedResult, err := h.repo.IncidentEvent.ListEvents(
 		&utils.ListIncidentEventsFilter{
 			IncidentID:   &incidentID,
 			PodName:      req.PodName,
