@@ -1,6 +1,15 @@
 package incident
 
-import "github.com/gin-gonic/gin"
+import (
+	"net/http"
 
-func GetIncident(c *gin.Context) {
+	"github.com/porter-dev/porter-agent/internal/repository"
+)
+
+type GetIncidentHandler struct {
+	repo *repository.Repository
+}
+
+func (h GetIncidentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
 }

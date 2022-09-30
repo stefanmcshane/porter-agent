@@ -11,26 +11,27 @@ import (
 	"github.com/porter-dev/porter-agent/internal/utils"
 )
 
-type ListIncidentsHandler struct {
+type ListIncidentEventsHandler struct {
 	repo *repository.Repository
 }
 
-func (h ListIncidentsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	req := &types.ListIncidentsRequest{}
+func (h ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	req := &types.ListIncidentEventsRequest{}
 
 	err := schema.NewDecoder().Decode(req, r.URL.Query())
 
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		log.Printf("API error in ListIncidentsHandler: %v", err)
+		log.Printf("API error in ListIncidentEventsHandler: %v", err)
 		return
 	}
 
-	incidents, paginatedResult, err := h.repo.Incident.ListIncidents(
-		&utils.ListIncidentsFilter{
-			Status:           req.Status,
-			ReleaseName:      req.ReleaseName,
-			ReleaseNamespace: req.ReleaseNamespace,
+	events, paginatedResult, err := h.repo.Event.ListEvents(
+		&utils.ListIncidentEventsFilter{
+			IncidentID:   req.IncidentID,
+			PodName:      req.PodName,
+			PodNamespace: req.PodNamespace,
+			Summary:      req.Summary,
 		},
 		utils.WithSortBy("updated_at"),
 		utils.WithOrder(utils.OrderDesc),
@@ -40,11 +41,11 @@ func (h ListIncidentsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("API error in ListIncidentsHandler: %v", err)
+		log.Printf("API error in ListIncidentEventsHandler: %v", err)
 		return
 	}
 
-	res := &types.ListIncidentsResponse{
+	res := &types.ListIncidentEventsResponse{
 		Pagination: &types.PaginationResponse{
 			NumPages:    paginatedResult.NumPages,
 			CurrentPage: paginatedResult.CurrentPage,
@@ -52,15 +53,15 @@ func (h ListIncidentsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		},
 	}
 
-	for _, incident := range incidents {
-		res.Incidents = append(res.Incidents, incident.ToAPITypeMeta())
+	for _, ev := range events {
+		res.Events = append(res.Events, ev.ToAPIType())
 	}
 
 	jsonResponse, err := json.Marshal(res)
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("API error in ListIncidentsHandler: %v", err)
+		log.Printf("API error in ListIncidentEventsHandler: %v", err)
 		return
 	}
 

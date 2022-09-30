@@ -33,10 +33,13 @@ func (r *IncidentEventRepository) ReadEvent(uid string) (*models.IncidentEvent, 
 	return event, nil
 }
 
-func (r *IncidentEventRepository) ListEvents(filter *utils.ListIncidentEventsFilter, opts ...utils.QueryOption) ([]*models.IncidentEvent, error) {
+func (r *IncidentEventRepository) ListEvents(
+	filter *utils.ListIncidentEventsFilter,
+	opts ...utils.QueryOption,
+) ([]*models.IncidentEvent, *utils.PaginatedResult, error) {
 	var events []*models.IncidentEvent
 
-	db := r.db.Scopes(utils.Paginate(opts))
+	db := r.db
 
 	if filter.IncidentID != nil {
 		db = db.Where("incident_id = ?", *filter.IncidentID)
@@ -58,11 +61,15 @@ func (r *IncidentEventRepository) ListEvents(filter *utils.ListIncidentEventsFil
 		db = db.Where("is_primary_cause = ?", *filter.IsPrimaryCause)
 	}
 
+	paginatedResult := &utils.PaginatedResult{}
+
+	db = r.db.Scopes(utils.Paginate(opts, db, paginatedResult))
+
 	if err := db.Find(&events).Error; err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return events, nil
+	return events, paginatedResult, nil
 }
 
 func (r *IncidentEventRepository) DeleteEvent(uid string) error {

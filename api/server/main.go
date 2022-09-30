@@ -1,19 +1,24 @@
 package main
 
 import (
-	"log"
+	"net/http"
 
-	"github.com/gin-gonic/gin"
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
+	"github.com/go-chi/render"
 	"github.com/porter-dev/porter-agent/api/server/handlers/incident"
 )
 
 func main() {
-	router := gin.Default()
+	r := chi.NewRouter()
 
-	router.GET("/incidents", incident.ListIncidents)
-	router.GET("/incidents/:uid", incident.GetIncident)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Use(render.SetContentType(render.ContentTypeJSON))
 
-	if err := router.Run(":50051"); err != nil {
-		log.Fatalln(err)
-	}
+	r.Method("GET", "/incidents", &incident.ListIncidentsHandler{})
+	r.Method("GET", "/incidents/{uid}", &incident.GetIncidentHandler{})
+	r.Method("GET", "/incidents/{uid}/events", &incident.ListIncidentEventsHandler{})
+
+	http.ListenAndServe(":3000", r)
 }

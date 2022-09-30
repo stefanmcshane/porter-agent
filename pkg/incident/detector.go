@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/porter-dev/porter-agent/api/server/types"
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/internal/utils"
@@ -105,8 +106,8 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 
 			// if the deployment is in a failure state, create a high severity incident
 			if isDeploymentFailing(d.KubeClient, ownerRef.Namespace, ownerRef.Name) {
-				incident.Severity = models.SeverityCritical
-				incident.InvolvedObjectKind = models.InvolvedObjectDeployment
+				incident.Severity = types.SeverityCritical
+				incident.InvolvedObjectKind = types.InvolvedObjectDeployment
 				incident.InvolvedObjectName = ownerRef.Name
 				incident.InvolvedObjectNamespace = ownerRef.Namespace
 
@@ -119,8 +120,8 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 				continue
 			}
 		case "job":
-			incident.Severity = models.SeverityNormal
-			incident.InvolvedObjectKind = models.InvolvedObjectJob
+			incident.Severity = types.SeverityNormal
+			incident.InvolvedObjectKind = types.InvolvedObjectJob
 			incident.InvolvedObjectName = ownerRef.Name
 			incident.InvolvedObjectNamespace = ownerRef.Namespace
 
@@ -134,8 +135,8 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 		}
 
 		// if the controller cases did not match, we simply store a pod-based incident
-		incident.Severity = models.SeverityNormal
-		incident.InvolvedObjectKind = models.InvolvedObjectPod
+		incident.Severity = types.SeverityNormal
+		incident.InvolvedObjectKind = types.InvolvedObjectPod
 		incident.InvolvedObjectName = alertedEvent.PodName
 		incident.InvolvedObjectNamespace = alertedEvent.PodNamespace
 
@@ -179,9 +180,9 @@ func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, 
 	// we look for a matching incident - the matching incident should refer to the same
 	// release name and namespace, should be active, and the incident event should have
 	// a primary cause event with the same summary as the candidate incident.
-	statusActive := models.IncidentStatusActive
+	statusActive := types.IncidentStatusActive
 
-	candidateMatches, err := d.Repository.Incident.ListIncidents(&utils.ListIncidentsFilter{
+	candidateMatches, _, err := d.Repository.Incident.ListIncidents(&utils.ListIncidentsFilter{
 		Status:           &statusActive,
 		ReleaseName:      &incident.ReleaseName,
 		ReleaseNamespace: &incident.ReleaseNamespace,
@@ -212,7 +213,7 @@ func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, 
 
 				// if there are different pods listed in the events, we promote this to a "Deployment" event
 				if numDistinctPods(mergedEvents) > 1 {
-					candidateMatch.InvolvedObjectKind = models.InvolvedObjectKind(ownerRef.Kind)
+					candidateMatch.InvolvedObjectKind = types.InvolvedObjectKind(ownerRef.Kind)
 					candidateMatch.InvolvedObjectName = ownerRef.Name
 					candidateMatch.InvolvedObjectNamespace = ownerRef.Namespace
 				}

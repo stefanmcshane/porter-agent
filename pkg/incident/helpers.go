@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/porter-dev/porter-agent/api/server/types"
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter-agent/pkg/event"
 	appsv1 "k8s.io/api/apps/v1"
@@ -76,12 +77,12 @@ func matchesToIncidentEvent(k8sVersion KubernetesVersion, es map[event.FilteredE
 func getIncidentMetaFromEvent(e *event.FilteredEvent) *models.Incident {
 	res := models.NewIncident()
 
-	res.IncidentStatus = models.IncidentStatusActive
+	res.IncidentStatus = types.IncidentStatusActive
 	res.LastSeen = e.Timestamp
 	res.ReleaseName = e.ReleaseName
 	res.ReleaseNamespace = e.Owner.Namespace
 	res.ChartName = e.ChartName
-	res.Severity = models.SeverityType(e.Severity)
+	res.Severity = types.SeverityType(e.Severity)
 
 	lastSeen := time.Now()
 

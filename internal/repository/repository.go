@@ -2,11 +2,6 @@ package repository
 
 import "gorm.io/gorm"
 
-type Query struct {
-	Offset uint
-	Limit  uint
-}
-
 type Repository struct {
 	Incident   *IncidentRepository
 	Event      *IncidentEventRepository

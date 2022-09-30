@@ -1,9 +1,9 @@
 package utils
 
-import "github.com/porter-dev/porter-agent/internal/models"
+import "github.com/porter-dev/porter-agent/api/server/types"
 
 type ListIncidentsFilter struct {
-	Status           *models.IncidentStatus
+	Status           *types.IncidentStatus
 	ReleaseName      *string
 	ReleaseNamespace *string
 }

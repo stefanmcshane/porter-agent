@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/porter-dev/porter-agent/api/server/types"
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/internal/utils"
@@ -38,9 +39,9 @@ func (r *IncidentResolver) Run() error {
 	// get all active incidents
 	// TODO: pagination
 
-	statusActive := models.IncidentStatusActive
+	statusActive := types.IncidentStatusActive
 
-	activeIncidents, err := r.Repository.Incident.ListIncidents(&utils.ListIncidentsFilter{
+	activeIncidents, _, err := r.Repository.Incident.ListIncidents(&utils.ListIncidentsFilter{
 		Status: &statusActive,
 	})
 
@@ -66,7 +67,7 @@ func (r *IncidentResolver) Run() error {
 func (r *IncidentResolver) handleResolved(incident *models.Incident) error {
 	resolvedTime := time.Now()
 	incident.ResolvedTime = &resolvedTime
-	incident.IncidentStatus = models.IncidentStatusResolved
+	incident.IncidentStatus = types.IncidentStatusResolved
 
 	_, err := r.Repository.Incident.UpdateIncident(incident)
 
@@ -80,11 +81,11 @@ func (r *IncidentResolver) handleResolved(incident *models.Incident) error {
 func (r *IncidentResolver) isResolved(incident *models.Incident) bool {
 	// switch on the incident type
 	switch incident.InvolvedObjectKind {
-	case models.InvolvedObjectDeployment:
+	case types.InvolvedObjectDeployment:
 		return r.isDeploymentResolved(incident)
-	case models.InvolvedObjectJob:
+	case types.InvolvedObjectJob:
 		return r.isJobResolved(incident)
-	case models.InvolvedObjectPod:
+	case types.InvolvedObjectPod:
 		return r.isPodResolved(incident)
 	}
 
@@ -94,7 +95,7 @@ func (r *IncidentResolver) isResolved(incident *models.Incident) bool {
 func (r *IncidentResolver) isDeploymentResolved(incident *models.Incident) bool {
 	// if this is a critical incident, we check whether the deployment has been running
 	// successfully for at least the critical buffer window
-	if incident.Severity == models.SeverityCritical {
+	if incident.Severity == types.SeverityCritical {
 		return !r.isWithinCriticalBufferWindow(incident.LastSeen) &&
 			!isDeploymentFailing(r.KubeClient, incident.InvolvedObjectNamespace, incident.InvolvedObjectName)
 	}

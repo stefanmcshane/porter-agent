@@ -22,17 +22,17 @@ func WithLimit(limit uint) QueryOption {
 	return withLimit(limit)
 }
 
-type withLimit uint
+type withLimit int
 
 func (w withLimit) Apply(q *Query) {
 	q.Limit = int(w)
 }
 
-func WithOffset(offset uint) QueryOption {
+func WithOffset(offset int64) QueryOption {
 	return withOffset(offset)
 }
 
-type withOffset uint
+type withOffset int
 
 func (w withOffset) Apply(q *Query) {
 	q.Offset = int(w)

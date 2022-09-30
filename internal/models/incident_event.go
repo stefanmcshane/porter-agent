@@ -3,6 +3,7 @@ package models
 import (
 	"time"
 
+	"github.com/porter-dev/porter-agent/api/server/types"
 	"gorm.io/gorm"
 )
 
@@ -35,4 +36,14 @@ type IncidentEvent struct {
 	// When taken together, the pod owner, summary, and primary cause field determine whether two events should be
 	// considered part of the same incident, or considered two different incidents.
 	IsPrimaryCause bool
+}
+
+func (e *IncidentEvent) ToAPIType() *types.IncidentEvent {
+	return &types.IncidentEvent{
+		LastSeen:     e.LastSeen,
+		PodName:      e.PodName,
+		PodNamespace: e.PodNamespace,
+		Summary:      e.Summary,
+		Detail:       e.Detail,
+	}
 }

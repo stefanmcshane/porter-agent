@@ -64,13 +64,13 @@ func NewClient() *Client {
 	}
 }
 
-func (c *Client) NotifyNew(incident *types.Incident) error {
+func (c *Client) NotifyNew(incident *types.IncidentMeta) error {
 	_, err := c.post(fmt.Sprintf("/api/projects/%s/clusters/%s/incidents/notify_new", c.projectID, c.clusterID), incident)
 
 	return err
 }
 
-func (c *Client) NotifyResolved(incident *types.Incident) error {
+func (c *Client) NotifyResolved(incident *types.IncidentMeta) error {
 	_, err := c.post(fmt.Sprintf("/api/projects/%s/clusters/%s/incidents/notify_resolved", c.projectID, c.clusterID), incident)
 
 	return err

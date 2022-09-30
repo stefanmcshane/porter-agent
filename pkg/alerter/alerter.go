@@ -3,6 +3,7 @@ package alerter
 import (
 	"time"
 
+	"github.com/porter-dev/porter-agent/api/server/types"
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/pkg/httpclient"
@@ -15,9 +16,9 @@ type Alerter struct {
 
 func (a *Alerter) HandleIncident(incident *models.Incident) error {
 	switch incident.Severity {
-	case models.SeverityCritical:
+	case types.SeverityCritical:
 		if a.shouldAlertCritical(incident) {
-			err := a.Client.NotifyNew(incident.ToAPIType())
+			err := a.Client.NotifyNew(incident.ToAPITypeMeta())
 			if err != nil {
 				return err
 			}
@@ -26,9 +27,9 @@ func (a *Alerter) HandleIncident(incident *models.Incident) error {
 		}
 
 		return nil
-	case models.SeverityNormal:
+	case types.SeverityNormal:
 		if a.shouldAlertNormal(incident) {
-			err := a.Client.NotifyNew(incident.ToAPIType())
+			err := a.Client.NotifyNew(incident.ToAPITypeMeta())
 
 			if err != nil {
 				return err
@@ -43,10 +44,10 @@ func (a *Alerter) HandleIncident(incident *models.Incident) error {
 
 func (a *Alerter) HandleResolved(incident *models.Incident) error {
 	switch incident.Severity {
-	case models.SeverityCritical:
+	case types.SeverityCritical:
 		// if this is a critical incident, alert immediately
-		return a.Client.NotifyResolved(incident.ToAPIType())
-	case models.SeverityNormal:
+		return a.Client.NotifyResolved(incident.ToAPITypeMeta())
+	case types.SeverityNormal:
 		// if this is a non-critical incident do nothing
 	}
 

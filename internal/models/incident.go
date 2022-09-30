@@ -7,28 +7,6 @@ import (
 	"gorm.io/gorm"
 )
 
-type SeverityType string
-
-const (
-	SeverityCritical SeverityType = "critical"
-	SeverityNormal   SeverityType = "normal"
-)
-
-type InvolvedObjectKind string
-
-const (
-	InvolvedObjectDeployment InvolvedObjectKind = "deployment"
-	InvolvedObjectJob        InvolvedObjectKind = "job"
-	InvolvedObjectPod        InvolvedObjectKind = "pod"
-)
-
-type IncidentStatus string
-
-const (
-	IncidentStatusResolved IncidentStatus = "resolved"
-	IncidentStatusActive   IncidentStatus = "active"
-)
-
 type Incident struct {
 	gorm.Model
 
@@ -39,17 +17,17 @@ type Incident struct {
 
 	ResolvedTime *time.Time
 
-	IncidentStatus IncidentStatus
+	IncidentStatus types.IncidentStatus
 
 	ReleaseName      string
 	ReleaseNamespace string
 	ChartName        string
 
-	InvolvedObjectKind      InvolvedObjectKind
+	InvolvedObjectKind      types.InvolvedObjectKind
 	InvolvedObjectName      string
 	InvolvedObjectNamespace string
 
-	Severity SeverityType
+	Severity types.SeverityType
 
 	Events []IncidentEvent
 }
@@ -62,16 +40,22 @@ func NewIncident() *Incident {
 	}
 }
 
-func (i *Incident) ToAPIType() *types.Incident {
-	return &types.Incident{
-		ID:               i.UniqueID,
-		ReleaseName:      i.ReleaseName,
-		ReleaseNamespace: i.ReleaseNamespace,
-		UpdatedAt:        i.UpdatedAt.Unix(),
-		CreatedAt:        i.CreatedAt.Unix(),
-		ChartName:        i.ChartName,
-		LatestState:      string(i.IncidentStatus),
-		LatestReason:     i.Events[0].Summary,
-		LatestMessage:    i.Events[0].Detail,
+func (i *Incident) ToAPITypeMeta() *types.IncidentMeta {
+	return &types.IncidentMeta{
+		ID:                      i.UniqueID,
+		ReleaseName:             i.ReleaseName,
+		ReleaseNamespace:        i.ReleaseNamespace,
+		UpdatedAt:               i.UpdatedAt,
+		CreatedAt:               i.CreatedAt,
+		ChartName:               i.ChartName,
+		Status:                  i.IncidentStatus,
+		InvolvedObjectKind:      i.InvolvedObjectKind,
+		InvolvedObjectName:      i.InvolvedObjectName,
+		InvolvedObjectNamespace: i.InvolvedObjectNamespace,
+		Severity:                i.Severity,
+
+		// LastSeen: ,
+		// Status: ,
+		// Summary: ,
 	}
 }

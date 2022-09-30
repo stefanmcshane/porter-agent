@@ -17,7 +17,13 @@ require (
 	sigs.k8s.io/controller-runtime v0.13.0
 )
 
-require github.com/pmezard/go-difflib v1.0.0 // indirect
+require (
+	github.com/ajg/form v1.5.1 // indirect
+	github.com/go-chi/chi v4.1.2+incompatible // indirect
+	github.com/go-chi/render v1.0.2 // indirect
+	github.com/gorilla/schema v1.2.0 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+)
 
 require (
 	cloud.google.com/go/compute v1.7.0 // indirect

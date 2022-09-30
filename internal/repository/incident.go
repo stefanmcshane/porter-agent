@@ -42,10 +42,13 @@ func (r *IncidentRepository) UpdateIncident(incident *models.Incident) (*models.
 	return incident, nil
 }
 
-func (r *IncidentRepository) ListIncidents(filter *utils.ListIncidentsFilter, opts ...utils.QueryOption) ([]*models.Incident, error) {
+func (r *IncidentRepository) ListIncidents(
+	filter *utils.ListIncidentsFilter,
+	opts ...utils.QueryOption,
+) ([]*models.Incident, *utils.PaginatedResult, error) {
 	var incidents []*models.Incident
 
-	db := r.db.Scopes(utils.Paginate(opts))
+	db := r.db
 
 	if filter.Status != nil {
 		db = db.Where("incident_status = ?", *filter.Status)
@@ -59,11 +62,15 @@ func (r *IncidentRepository) ListIncidents(filter *utils.ListIncidentsFilter, op
 		db = db.Where("release_namespace = ?", *filter.ReleaseNamespace)
 	}
 
+	paginatedResult := &utils.PaginatedResult{}
+
+	db = r.db.Scopes(utils.Paginate(opts, db, paginatedResult))
+
 	if err := db.Preload("Events").Find(&incidents).Error; err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return incidents, nil
+	return incidents, paginatedResult, nil
 }
 
 func (r *IncidentRepository) DeleteIncident(uid string) error {
