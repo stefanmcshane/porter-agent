@@ -9,7 +9,7 @@ type ListIncidentsFilter struct {
 }
 
 type ListIncidentEventsFilter struct {
-	IncidentID     *uint
+	IncidentID     *string
 	PodName        *string
 	PodNamespace   *string
 	Summary        *string

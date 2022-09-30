@@ -2,9 +2,11 @@ package incident
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
+	"github.com/go-chi/chi"
 	"github.com/gorilla/schema"
 	"github.com/porter-dev/porter-agent/api/server/types"
 	"github.com/porter-dev/porter-agent/internal/repository"
@@ -16,6 +18,14 @@ type ListIncidentEventsHandler struct {
 }
 
 func (h ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	incidentID := chi.URLParam(r, "uid")
+
+	if incidentID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Printf("API error in ListIncidentEventsHandler: %v", fmt.Errorf("empty incident id"))
+		return
+	}
+
 	req := &types.ListIncidentEventsRequest{}
 
 	err := schema.NewDecoder().Decode(req, r.URL.Query())
@@ -28,7 +38,7 @@ func (h ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 
 	events, paginatedResult, err := h.repo.Event.ListEvents(
 		&utils.ListIncidentEventsFilter{
-			IncidentID:   req.IncidentID,
+			IncidentID:   &incidentID,
 			PodName:      req.PodName,
 			PodNamespace: req.PodNamespace,
 			Summary:      req.Summary,
