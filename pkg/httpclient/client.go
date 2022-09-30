@@ -8,59 +8,34 @@ import (
 	"time"
 
 	"github.com/porter-dev/porter-agent/api/server/types"
-	"github.com/spf13/viper"
+	"github.com/porter-dev/porter-agent/internal/logger"
 )
 
-var (
-	porterHost  string
-	porterPort  string
-	porterToken string
-	clusterID   string
-	projectID   string
-)
-
-func init() {
-	viper.SetDefault("PORTER_PORT", "80")
-	viper.AutomaticEnv()
-
-	porterPort = viper.GetString("PORTER_PORT")
-	porterHost = getStringOrDie("PORTER_HOST")
-	porterToken = getStringOrDie("PORTER_TOKEN")
-	clusterID = getStringOrDie("CLUSTER_ID")
-	projectID = getStringOrDie("PROJECT_ID")
-
+type HTTPClientConf struct {
+	PorterHost  string `env:"PORTER_HOST"`
+	PorterToken string `env:"PORTER_TOKEN"`
+	ClusterID   string `env:"CLUSTER_ID"`
+	ProjectID   string `env:"PROJECT_ID"`
 }
-
-func getStringOrDie(key string) string {
-	value := viper.GetString(key)
-
-	if value == "" {
-		panic(fmt.Errorf("empty %s", key))
-		// consumerLog.Error(fmt.Errorf("empty %s", key), fmt.Sprintf("%s must not be empty", key))
-		// os.Exit(1)
-	}
-
-	return value
-}
-
-type ClientOptions struct{}
 
 type Client struct {
 	client               *http.Client
 	token                string
 	host                 string
 	projectID, clusterID string
+	logger               *logger.Logger
 }
 
-func NewClient() *Client {
+func NewClient(conf *HTTPClientConf, logger *logger.Logger) *Client {
 	return &Client{
 		client: &http.Client{
 			Timeout: 3 * time.Second,
 		},
-		token:     porterToken,
-		host:      porterHost,
-		projectID: projectID,
-		clusterID: clusterID,
+		token:     conf.PorterToken,
+		host:      conf.PorterHost,
+		projectID: conf.ProjectID,
+		clusterID: conf.ClusterID,
+		logger:    logger,
 	}
 }
 
@@ -74,10 +49,6 @@ func (c *Client) NotifyResolved(incident *types.IncidentMeta) error {
 	_, err := c.post(fmt.Sprintf("/api/projects/%s/clusters/%s/incidents/notify_resolved", c.projectID, c.clusterID), incident)
 
 	return err
-}
-
-func (c *Client) get(url string, options ...ClientOptions) (*http.Response, error) {
-	return c.client.Get(fmt.Sprintf("%s%s", c.host, url))
 }
 
 func (c *Client) post(path string, body interface{}) (*http.Response, error) {

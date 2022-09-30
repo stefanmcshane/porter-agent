@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/porter-dev/porter-agent/api/server/types"
+	"github.com/porter-dev/porter-agent/internal/logger"
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/internal/utils"
@@ -20,6 +21,7 @@ type IncidentDetector struct {
 	EventStore  event.EventStore
 	Repository  *repository.Repository
 	Alerter     *alerter.Alerter
+	Logger      *logger.Logger
 }
 
 // DetectIncident returns an incident if one should be triggered, if there is no incident it will return
@@ -45,8 +47,6 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 	alertedEvents := make([]*event.FilteredEvent, 0)
 
 	for _, e := range es {
-		fmt.Println("processing:", e.KubernetesReason, e.KubernetesMessage)
-
 		// if the event severity is low, do not alert
 		if e.Severity == event.EventSeverityLow {
 			continue
@@ -88,8 +88,6 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 		}
 	}
 
-	fmt.Println("LENGTH OF MATCHES IS", len(matches))
-
 	// iterate through incident events
 	for alertedEvent, match := range matches {
 		// construct the basic incident event model
@@ -102,10 +100,12 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 
 		switch strings.ToLower(ownerRef.Kind) {
 		case "deployment":
-			fmt.Printf("determing if deployment %s is failing\n", ownerRef.Name)
+			d.Logger.Info().Caller().Msgf("determing if deployment %s is failing", ownerRef.Name)
 
 			// if the deployment is in a failure state, create a high severity incident
 			if isDeploymentFailing(d.KubeClient, ownerRef.Namespace, ownerRef.Name) {
+				d.Logger.Info().Caller().Msgf("deployment %s/%s is failing, storing new incident", ownerRef.Namespace, ownerRef.Name)
+
 				incident.Severity = types.SeverityCritical
 				incident.InvolvedObjectKind = types.InvolvedObjectDeployment
 				incident.InvolvedObjectName = ownerRef.Name
@@ -120,6 +120,8 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 				continue
 			}
 		case "job":
+			d.Logger.Info().Caller().Msgf("job %s/%s is failing, storing new incident", ownerRef.Namespace, ownerRef.Name)
+
 			incident.Severity = types.SeverityNormal
 			incident.InvolvedObjectKind = types.InvolvedObjectJob
 			incident.InvolvedObjectName = ownerRef.Name
@@ -135,6 +137,8 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 		}
 
 		// if the controller cases did not match, we simply store a pod-based incident
+		d.Logger.Info().Caller().Msgf("pod %s/%s is failing, storing new incident", alertedEvent.PodNamespace, alertedEvent.PodName)
+
 		incident.Severity = types.SeverityNormal
 		incident.InvolvedObjectKind = types.InvolvedObjectPod
 		incident.InvolvedObjectName = alertedEvent.PodName
@@ -153,19 +157,16 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 func (d *IncidentDetector) saveIncident(incident *models.Incident, ownerRef *event.EventOwner) error {
 	// if mergeWithMatchingIncident returns a non-nil incident, then we simply update the incident in the DB
 	if mergedIncident := d.mergeWithMatchingIncident(incident, ownerRef); mergedIncident != nil {
-		matchedIncidentID := mergedIncident.ID
+		d.Logger.Info().Caller().Msgf("found matching incident %s", mergedIncident.UniqueID)
+
 		incident, err := d.Repository.Incident.UpdateIncident(mergedIncident)
 
 		if err != nil {
 			return err
 		}
 
-		fmt.Println("INCIDENTS MATCHED:", matchedIncidentID, incident.ID)
-
 		return d.Alerter.HandleIncident(incident)
 	}
-
-	fmt.Println("CREATING NEW INCIDENT")
 
 	incident, err := d.Repository.Incident.CreateIncident(incident)
 
@@ -204,8 +205,6 @@ func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, 
 	for _, candidateMatch := range candidateMatches {
 		for _, candidateMatchEvent := range candidateMatch.Events {
 			if candidateMatchEvent.IsPrimaryCause && candidateMatchEvent.Summary == primaryCauseSummary {
-				fmt.Println("GOT MATCHING INCIDENT", candidateMatch)
-
 				// in this case, we've found a match, and we merge and return
 				candidateMatch.LastSeen = incident.LastSeen
 				mergedEvents := mergeEvents(candidateMatch.Events, incident.Events)

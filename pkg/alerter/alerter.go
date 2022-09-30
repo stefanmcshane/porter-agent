@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/porter-dev/porter-agent/api/server/types"
+	"github.com/porter-dev/porter-agent/internal/logger"
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/pkg/httpclient"
@@ -12,6 +13,7 @@ import (
 type Alerter struct {
 	Client     *httpclient.Client
 	Repository *repository.Repository
+	Logger     *logger.Logger
 }
 
 func (a *Alerter) HandleIncident(incident *models.Incident) error {

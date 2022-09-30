@@ -1,9 +1,9 @@
 package controllers
 
 import (
-	"fmt"
 	"strings"
 
+	"github.com/porter-dev/porter-agent/internal/logger"
 	"github.com/porter-dev/porter-agent/pkg/event"
 	"github.com/porter-dev/porter-agent/pkg/incident"
 	v1 "k8s.io/api/core/v1"
@@ -20,6 +20,7 @@ type PodController struct {
 	EventStore       event.EventStore
 	KubeVersion      incident.KubernetesVersion
 	IncidentDetector *incident.IncidentDetector
+	Logger           *logger.Logger
 }
 
 func (p *PodController) Start() {
@@ -48,6 +49,8 @@ func (p *PodController) Start() {
 		DeleteFunc: p.processDeletePod,
 	})
 
+	p.Logger.Info().Caller().Msgf("started pod controller")
+
 	informer.Run(stopper)
 }
 
@@ -62,7 +65,7 @@ func (p *PodController) processUpdatePod(oldObj, newObj interface{}) {
 }
 
 func (p *PodController) processPod(pod *v1.Pod) error {
-	fmt.Println("processing pod:", pod.Name)
+	p.Logger.Info().Caller().Msgf("processing pod: %s", pod.Name)
 
 	es := event.NewFilteredEventsFromPod(pod)
 
@@ -77,6 +80,5 @@ func (p *PodController) processPod(pod *v1.Pod) error {
 }
 
 func (p *PodController) processDeletePod(obj interface{}) {
-	pod := obj.(*v1.Pod)
-	fmt.Println("processing pod event:", pod.Name)
+	// do nothing
 }

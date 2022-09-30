@@ -2,7 +2,6 @@ package incident
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/porter-dev/porter-agent/api/server/types"
@@ -32,8 +31,6 @@ func isDeploymentFailing(kubeClient *kubernetes.Clientset, deplNamespace, deplNa
 
 	// determine if the deployment has an appropriate number of ready replicas
 	minUnavailable := *(depl.Spec.Replicas) - getMaxUnavailable(depl)
-
-	fmt.Printf("min unavailable is %d, ready replicas are %d\n", minUnavailable, depl.Status.ReadyReplicas)
 
 	return depl.Status.ReadyReplicas < minUnavailable
 }

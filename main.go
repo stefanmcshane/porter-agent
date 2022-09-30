@@ -1,114 +1,76 @@
 package main
 
 import (
-	"flag"
-	"fmt"
-	"log"
 	"os"
 	"time"
 
-	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that exec-entrypoint and run can make use of them.
-
 	"gorm.io/gorm"
 	"k8s.io/client-go/kubernetes"
+
+	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
+	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter/api/server/shared/config/env"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joeshaw/envdecode"
-	"github.com/porter-dev/porter-agent/controllers"
 	"github.com/porter-dev/porter-agent/internal/adapter"
+	"github.com/porter-dev/porter-agent/internal/logger"
 	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/pkg/alerter"
+	"github.com/porter-dev/porter-agent/pkg/controllers"
 	"github.com/porter-dev/porter-agent/pkg/httpclient"
 	"github.com/porter-dev/porter-agent/pkg/incident"
 	"github.com/porter-dev/porter-agent/pkg/logstore"
 	"github.com/porter-dev/porter-agent/pkg/logstore/memorystore"
 	"github.com/porter-dev/porter-agent/pkg/pulsar"
-	//+kubebuilder:scaffold:imports
 )
 
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
-
 	httpServer *gin.Engine
 )
 
-func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
-	//+kubebuilder:scaffold:scheme
-}
-
 type LogStoreConf struct {
 	LogStoreKind string `env:"LOG_STORE_KIND,default=memory"`
-}
 
+	// TODO: loki environment variables for initialization here
+}
 type EnvDecoderConf struct {
-	LogStoreConf LogStoreConf
-	DBConf       env.DBConf
+	Debug bool `env:"DEBUG,default=true"`
+
+	LogStoreConf   LogStoreConf
+	HTTPClientConf httpclient.HTTPClientConf
+	DBConf         env.DBConf
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8000", "The address the metric endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
-	opts := zap.Options{
-		Development: true,
-	}
-	opts.BindFlags(flag.CommandLine)
-	flag.Parse()
-
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "5731d595.porter.run",
-	})
-	if err != nil {
-		setupLog.Error(err, "unable to start manager")
-		os.Exit(1)
-	}
+	kubeClient := kubernetes.NewForConfigOrDie(ctrl.GetConfigOrDie())
 
 	var envDecoderConf EnvDecoderConf = EnvDecoderConf{}
 
 	if err := envdecode.StrictDecode(&envDecoderConf); err != nil {
-		setupLog.Error(err, "unable to decode env vars")
+		logger.NewErrorConsole(true).Fatal().Caller().Msgf("could not decode env conf: %v", err)
+
 		os.Exit(1)
 	}
 
-	client := httpclient.NewClient()
+	l := logger.NewConsole(envDecoderConf.Debug)
+
+	client := httpclient.NewClient(&envDecoderConf.HTTPClientConf, l)
 
 	// create database connection through adapter
 	db, err := adapter.New(&envDecoderConf.DBConf)
 
 	if err != nil {
-		setupLog.Error(err, "unable to create gorm db connection")
-		os.Exit(1)
+		l.Fatal().Caller().Msgf("could not create database connection: %v", err)
 	}
 
-	if err := repository.AutoMigrate(db, true); err != nil {
-		setupLog.Error(err, "auto migration failed")
-		os.Exit(1)
+	if err := repository.AutoMigrate(db, false); err != nil {
+		l.Fatal().Caller().Msgf("auto migration failed: %v", err)
 	}
 
 	var logStore logstore.LogStore
@@ -117,23 +79,20 @@ func main() {
 		logStore, err = memorystore.New("test", memorystore.Options{})
 
 		if err != nil {
-			setupLog.Error(err, "memory-based log store setup failed")
-			os.Exit(1)
+			l.Fatal().Caller().Msgf("memory-based log store setup failed: %v", err)
 		}
 	} else {
-		fmt.Println("loki integration not implemented")
-		os.Exit(1)
+		l.Fatal().Caller().Msg("loki integration not enabled")
 	}
 
-	go cleanupEventCache(db)
+	go cleanupEventCache(db, l)
 
 	repo := repository.NewRepository(db)
-
-	kubeClient := kubernetes.NewForConfigOrDie(mgr.GetConfig())
 
 	alerter := &alerter.Alerter{
 		Client:     client,
 		Repository: repo,
+		Logger:     l,
 	}
 
 	detector := &incident.IncidentDetector{
@@ -142,6 +101,7 @@ func main() {
 		KubeVersion: incident.KubernetesVersion_1_20,
 		Repository:  repo,
 		Alerter:     alerter,
+		Logger:      l,
 	}
 
 	resolver := &incident.IncidentResolver{
@@ -150,6 +110,7 @@ func main() {
 		KubeVersion: incident.KubernetesVersion_1_20,
 		Repository:  repo,
 		Alerter:     alerter,
+		Logger:      l,
 	}
 
 	// trigger resolver through pulsar
@@ -160,7 +121,7 @@ func main() {
 			err := resolver.Run()
 
 			if err != nil {
-				fmt.Println("pulsar error:", err)
+				l.Error().Caller().Msgf("resolver exited with error: %v", err)
 			}
 		}
 	}()
@@ -172,6 +133,7 @@ func main() {
 		IncidentDetector: detector,
 		Repository:       repo,
 		LogStore:         logStore,
+		Logger:           l,
 	}
 
 	go eventController.Start()
@@ -181,27 +143,31 @@ func main() {
 		// TODO: don't hardcode to 1.20
 		KubeVersion:      incident.KubernetesVersion_1_20,
 		IncidentDetector: detector,
+		Logger:           l,
 	}
 
 	podController.Start()
 }
 
-func cleanupEventCache(db *gorm.DB) {
+func cleanupEventCache(db *gorm.DB, l *logger.Logger) {
 	for {
-		log.Println("cleaning old event cache entries from DB")
+		l.Info().Caller().Msgf("cleaning up old event caches")
 
 		var olderCache []*models.EventCache
 
 		if err := db.Model(&models.EventCache{}).Where("timestamp <= ?", time.Now().Add(-time.Hour)).Find(&olderCache).Error; err == nil {
+			numDeleted := 0
+
 			for _, cache := range olderCache {
 				if err := db.Delete(cache).Error; err != nil {
-					log.Printf("error deleting old event cache with ID: %d. Error: %v\n", cache.ID, err)
+					l.Error().Caller().Msgf("error deleting old event cache with ID: %d. Error: %v\n", cache.ID, err)
+					numDeleted++
 				}
 			}
 
-			log.Println("old event cache entries deleted from DB")
+			l.Info().Caller().Msgf("deleted %d event cache objects from database", numDeleted)
 		} else {
-			log.Printf("error querying for older event cache DB entries: %v\n", err)
+			l.Error().Caller().Msgf("error querying for older event cache DB entries: %v\n", err)
 		}
 
 		time.Sleep(time.Hour)

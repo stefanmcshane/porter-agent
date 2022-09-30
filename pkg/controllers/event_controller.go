@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/porter-dev/porter-agent/internal/logger"
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/pkg/event"
@@ -28,6 +29,7 @@ type EventController struct {
 	IncidentDetector *incident.IncidentDetector
 	Repository       *repository.Repository
 	LogStore         logstore.LogStore
+	Logger           *logger.Logger
 }
 
 type AuthError struct{}
@@ -64,6 +66,8 @@ func (e *EventController) Start() {
 		DeleteFunc: e.processDeleteEvent,
 	})
 
+	e.Logger.Info().Caller().Msgf("started event controller")
+
 	informer.Run(stopper)
 }
 
@@ -81,17 +85,18 @@ func (e *EventController) processEvent(k8sEvent *v1.Event) error {
 	// TODO: de-duplicate events which have already been stored/processed based
 	// on both the timestamp and the event ID
 	if e.hasBeenProcessed(k8sEvent) {
-		fmt.Printf("skipping event %s as it has already been processed\n", k8sEvent.Name)
+		e.Logger.Info().Caller().Msgf("skipping event %s as it has already been processed", k8sEvent.Name)
 		return nil
 	}
 
-	fmt.Println("processing kubernetes event:", k8sEvent.Name)
+	e.Logger.Info().Caller().Msgf("processing kubernetes event: %s", k8sEvent.Name)
 
 	// store the event via the log store
 	if serializedEvent, err := serializeEvent(k8sEvent); err == nil {
 		err = e.LogStore.Push(serializedEvent)
 
 		if err != nil {
+			e.Logger.Error().Caller().Msgf("could not push serialized event to log store: %v", err)
 			return e.updateEventCache(k8sEvent, err)
 		}
 	}
@@ -104,6 +109,7 @@ func (e *EventController) processEvent(k8sEvent *v1.Event) error {
 	err := e.IncidentDetector.DetectIncident(es)
 
 	if err != nil {
+		e.Logger.Error().Caller().Msgf("encountered error while running incident detection: %v", err)
 		return e.updateEventCache(k8sEvent, err)
 	}
 
@@ -119,12 +125,16 @@ func (e *EventController) hasBeenProcessed(k8sEvent *v1.Event) bool {
 func (e *EventController) updateEventCache(k8sEvent *v1.Event, currError error) error {
 	now := time.Now()
 
-	e.Repository.EventCache.CreateEventCache(&models.EventCache{
+	_, err := e.Repository.EventCache.CreateEventCache(&models.EventCache{
 		EventUID:     getEventCacheID(k8sEvent),
 		PodName:      k8sEvent.InvolvedObject.Name,
 		PodNamespace: k8sEvent.InvolvedObject.Namespace,
 		Timestamp:    &now,
 	})
+
+	if err != nil {
+		e.Logger.Error().Caller().Msgf("could not create event in event cache: %v", err)
+	}
 
 	return currError
 }

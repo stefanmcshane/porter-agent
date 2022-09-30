@@ -1,10 +1,10 @@
 package incident
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/porter-dev/porter-agent/api/server/types"
+	"github.com/porter-dev/porter-agent/internal/logger"
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/internal/utils"
@@ -17,6 +17,7 @@ type IncidentResolver struct {
 	KubeVersion KubernetesVersion
 	Repository  *repository.Repository
 	Alerter     *alerter.Alerter
+	Logger      *logger.Logger
 }
 
 // INCIDENT_REPEAT_BUFFER_HOURS are the number of hours we provide as buffer to determine whether the issue
@@ -50,12 +51,14 @@ func (r *IncidentResolver) Run() error {
 	}
 
 	for _, activeIncident := range activeIncidents {
-		fmt.Printf("checking whether incident %s is resolved\n", activeIncident.UniqueID)
+		r.Logger.Info().Caller().Msgf("checking whether incident %s is resolved", activeIncident.UniqueID)
 
 		if r.isResolved(activeIncident) {
-			fmt.Println("the incident was resolved!")
+			r.Logger.Info().Caller().Msgf("incident %s is resolved", activeIncident.UniqueID)
 
 			if err := r.handleResolved(activeIncident); err != nil {
+				r.Logger.Error().Caller().Msgf("error while handling incident resolved: %v", err)
+
 				return err
 			}
 		}
