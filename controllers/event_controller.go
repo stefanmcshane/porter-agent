@@ -130,10 +130,7 @@ func (e *EventController) updateEventCache(k8sEvent *v1.Event, currError error) 
 }
 
 func (e *EventController) processDeleteEvent(obj interface{}) {
-	k8sEvent := obj.(*v1.Event)
-
-	// remove from event cache
-	e.Repository.Event.DeleteEvent(getEventCacheID(k8sEvent))
+	// do nothing
 }
 
 func getEventCacheID(k8sEvent *v1.Event) string {

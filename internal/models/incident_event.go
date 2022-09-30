@@ -10,8 +10,8 @@ import (
 type IncidentEvent struct {
 	gorm.Model
 
-	UniqueID    string `gorm:"unique"`
-	IncidentUID string
+	UniqueID   string `gorm:"unique"`
+	IncidentID uint
 
 	LastSeen *time.Time
 
