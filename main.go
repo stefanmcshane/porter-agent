@@ -31,6 +31,8 @@ import (
 	"github.com/porter-dev/porter-agent/pkg/alerter"
 	"github.com/porter-dev/porter-agent/pkg/httpclient"
 	"github.com/porter-dev/porter-agent/pkg/incident"
+	"github.com/porter-dev/porter-agent/pkg/logstore"
+	"github.com/porter-dev/porter-agent/pkg/logstore/memorystore"
 	"github.com/porter-dev/porter-agent/pkg/pulsar"
 	//+kubebuilder:scaffold:imports
 )
@@ -48,8 +50,13 @@ func init() {
 	//+kubebuilder:scaffold:scheme
 }
 
+type LogStoreConf struct {
+	LogStoreKind string `env:"LOG_STORE_KIND,default=memory"`
+}
+
 type EnvDecoderConf struct {
-	DBConf env.DBConf
+	LogStoreConf LogStoreConf
+	DBConf       env.DBConf
 }
 
 func main() {
@@ -104,6 +111,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	var logStore logstore.LogStore
+
+	if envDecoderConf.LogStoreConf.LogStoreKind == "memory" {
+		logStore, err = memorystore.New("test", memorystore.Options{})
+
+		if err != nil {
+			setupLog.Error(err, "memory-based log store setup failed")
+			os.Exit(1)
+		}
+	} else {
+		fmt.Println("loki integration not implemented")
+		os.Exit(1)
+	}
+
 	go cleanupEventCache(db)
 
 	repo := repository.NewRepository(db)
@@ -150,6 +171,7 @@ func main() {
 		KubeVersion:      incident.KubernetesVersion_1_20,
 		IncidentDetector: detector,
 		Repository:       repo,
+		LogStore:         logStore,
 	}
 
 	go eventController.Start()

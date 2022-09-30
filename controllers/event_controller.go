@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/pkg/event"
 	"github.com/porter-dev/porter-agent/pkg/incident"
+	"github.com/porter-dev/porter-agent/pkg/logstore"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
@@ -25,6 +27,7 @@ type EventController struct {
 	EventStore       event.EventStore
 	IncidentDetector *incident.IncidentDetector
 	Repository       *repository.Repository
+	LogStore         logstore.LogStore
 }
 
 type AuthError struct{}
@@ -84,6 +87,15 @@ func (e *EventController) processEvent(k8sEvent *v1.Event) error {
 
 	fmt.Println("processing kubernetes event:", k8sEvent.Name)
 
+	// store the event via the log store
+	if serializedEvent, err := serializeEvent(k8sEvent); err == nil {
+		err = e.LogStore.Push(serializedEvent)
+
+		if err != nil {
+			return e.updateEventCache(k8sEvent, err)
+		}
+	}
+
 	filteredEvent := event.NewFilteredEventFromK8sEvent(k8sEvent)
 
 	es := []*event.FilteredEvent{filteredEvent}
@@ -118,9 +130,26 @@ func (e *EventController) updateEventCache(k8sEvent *v1.Event, currError error) 
 }
 
 func (e *EventController) processDeleteEvent(obj interface{}) {
-	// TODO: remove from event cache
+	k8sEvent := obj.(*v1.Event)
+
+	// remove from event cache
+	e.Repository.Event.DeleteEvent(getEventCacheID(k8sEvent))
 }
 
 func getEventCacheID(k8sEvent *v1.Event) string {
 	return fmt.Sprintf("%v-%s-%s-%s", k8sEvent.UID, k8sEvent.Name, k8sEvent.Namespace, k8sEvent.InvolvedObject.Name)
+}
+
+func serializeEvent(k8sEvent *v1.Event) (string, error) {
+	// set the managed fields to null, as this adds a lot of unnecessary data to serialized
+	// object
+	k8sEvent.ObjectMeta.ManagedFields = nil
+
+	jsonBytes, err := json.Marshal(k8sEvent)
+
+	if err != nil {
+		return "", err
+	}
+
+	return string(jsonBytes), nil
 }
