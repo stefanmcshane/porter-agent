@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -23,17 +24,20 @@ import (
 	"github.com/porter-dev/porter/api/server/shared/config/env"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joeshaw/envdecode"
 	"github.com/porter-dev/porter-agent/controllers"
 	"github.com/porter-dev/porter-agent/internal/adapter"
-	"github.com/porter-dev/porter-agent/pkg/consumer"
+	"github.com/porter-dev/porter-agent/internal/repository"
+	"github.com/porter-dev/porter-agent/pkg/alerter"
+	"github.com/porter-dev/porter-agent/pkg/httpclient"
 	"github.com/porter-dev/porter-agent/pkg/incident"
+	"github.com/porter-dev/porter-agent/pkg/pulsar"
 	//+kubebuilder:scaffold:imports
 )
 
 var (
-	scheme        = runtime.NewScheme()
-	setupLog      = ctrl.Log.WithName("setup")
-	eventConsumer *consumer.EventConsumer
+	scheme   = runtime.NewScheme()
+	setupLog = ctrl.Log.WithName("setup")
 
 	httpServer *gin.Engine
 )
@@ -42,6 +46,10 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	//+kubebuilder:scaffold:scheme
+}
+
+type EnvDecoderConf struct {
+	DBConf env.DBConf
 }
 
 func main() {
@@ -74,22 +82,77 @@ func main() {
 		os.Exit(1)
 	}
 
+	var envDecoderConf EnvDecoderConf = EnvDecoderConf{}
+
+	if err := envdecode.StrictDecode(&envDecoderConf); err != nil {
+		setupLog.Error(err, "unable to decode env vars")
+		os.Exit(1)
+	}
+
+	client := httpclient.NewClient()
+
+	// create database connection through adapter
+	db, err := adapter.New(&envDecoderConf.DBConf)
+
+	if err != nil {
+		setupLog.Error(err, "unable to create gorm db connection")
+		os.Exit(1)
+	}
+
+	if err := repository.AutoMigrate(db, true); err != nil {
+		setupLog.Error(err, "auto migration failed")
+		os.Exit(1)
+	}
+
+	go cleanupEventCache(db)
+
+	repo := repository.NewRepository(db)
+
 	kubeClient := kubernetes.NewForConfigOrDie(mgr.GetConfig())
+
+	alerter := &alerter.Alerter{
+		Client:     client,
+		Repository: repo,
+	}
 
 	detector := &incident.IncidentDetector{
 		KubeClient: kubeClient,
 		// TODO: don't hardcode to 1.20
 		KubeVersion: incident.KubernetesVersion_1_20,
+		Repository:  repo,
+		Alerter:     alerter,
 	}
 
-	// eventController := controllers.EventController{
-	// 	KubeClient: kubeClient,
-	// 	// TODO: don't hardcode to 1.20
-	// 	KubeVersion:      incident.KubernetesVersion_1_20,
-	// 	IncidentDetector: detector,
-	// }
+	resolver := &incident.IncidentResolver{
+		KubeClient: kubeClient,
+		// TODO: don't hardcode to 1.20
+		KubeVersion: incident.KubernetesVersion_1_20,
+		Repository:  repo,
+		Alerter:     alerter,
+	}
 
-	// eventController.Start()
+	// trigger resolver through pulsar
+	go func() {
+		p := pulsar.NewPulsar(1, time.Minute) // pulse every 1 minute
+
+		for range p.Pulsate() {
+			err := resolver.Run()
+
+			if err != nil {
+				fmt.Println("pulsar error:", err)
+			}
+		}
+	}()
+
+	eventController := controllers.EventController{
+		KubeClient: kubeClient,
+		// TODO: don't hardcode to 1.20
+		KubeVersion:      incident.KubernetesVersion_1_20,
+		IncidentDetector: detector,
+		Repository:       repo,
+	}
+
+	go eventController.Start()
 
 	podController := controllers.PodController{
 		KubeClient: kubeClient,
@@ -99,87 +162,6 @@ func main() {
 	}
 
 	podController.Start()
-
-	db, err := adapter.New(&env.DBConf{})
-
-	if err != nil {
-		log.Fatalf("error opening connection to DB: %v\n", err)
-	}
-
-	go cleanupEventCache(db)
-
-	// for {
-	// 	pods, err := kubeClient.CoreV1().Pods("porter-agent-system").List(
-	// 		context.Background(), v1.ListOptions{
-	// 			LabelSelector: "app.kubernetes.io/name=redis",
-	// 		},
-	// 	)
-
-	// 	if err == nil && len(pods.Items) > 0 {
-	// 		running := false
-
-	// 		for _, pod := range pods.Items {
-	// 			if pod.Status.Phase == corev1.PodRunning {
-	// 				running = true
-	// 				break
-	// 			}
-	// 		}
-
-	// 		if running {
-	// 			break
-	// 		}
-	// 	}
-
-	// 	setupLog.Info("waiting for redis ...")
-	// 	time.Sleep(time.Second * 2)
-	// }
-
-	// if err = (&controllers.PodReconciler{
-	// 	Client:     mgr.GetClient(),
-	// 	Scheme:     mgr.GetScheme(),
-	// 	KubeClient: kubeClient,
-	// 	PodFilter:  utils.NewAgentPodFilter(kubeClient),
-	// }).SetupWithManager(mgr); err != nil {
-	// 	setupLog.Error(err, "unable to create controller", "controller", "Pod")
-	// 	os.Exit(1)
-	// }
-	// //+kubebuilder:scaffold:builder
-
-	// if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-	// 	setupLog.Error(err, "unable to set up health check")
-	// 	os.Exit(1)
-	// }
-	// if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-	// 	setupLog.Error(err, "unable to set up ready check")
-	// 	os.Exit(1)
-	// }
-
-	// // create the event consumer
-	// setupLog.Info("creating event consumer")
-	// eventConsumer = consumer.NewEventConsumer(50, time.Millisecond, context.TODO())
-
-	// setupLog.Info("starting event consumer")
-	// go eventConsumer.Start()
-
-	// setupLog.Info("starting HTTP server")
-	// httpServer = routes.NewRouter()
-	// go httpServer.Run(":10001")
-
-	// go func() {
-	// 	// every 5 minutes, we check for deleted pods
-	// 	// if a pod that was part of an active incident
-	// 	// was deleted, we set the pod's status to resolved
-	// 	for {
-	// 		time.Sleep(time.Minute * 5)
-	// 		controllers.ProcessDeletedPods()
-	// 	}
-	// }()
-
-	// setupLog.Info("starting manager")
-	// if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-	// 	setupLog.Error(err, "problem running manager")
-	// 	os.Exit(1)
-	// }
 }
 
 func cleanupEventCache(db *gorm.DB) {

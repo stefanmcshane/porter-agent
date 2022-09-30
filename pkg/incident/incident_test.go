@@ -33,7 +33,7 @@ func TestEventFailingLivenessProbeMatch1_20(t *testing.T) {
 	matches := make([]*incident.EventMatch, 0)
 
 	for _, event := range events {
-		currMatch := incident.GetEventMatchFromEvent(incident.KubernetesVersion_1_20, event)
+		currMatch := incident.GetEventMatchFromEvent(incident.KubernetesVersion_1_20, nil, event)
 
 		if currMatch != nil {
 			matches = append(matches, currMatch)
@@ -44,7 +44,7 @@ func TestEventFailingLivenessProbeMatch1_20(t *testing.T) {
 	assert.Equal(t, 1, len(matches), "only a single match should exist")
 
 	// match should be liveness probe
-	assert.Equal(t, "The application is failing its health check", matches[0].Summary, "match should be liveness probe failure")
+	assert.Equal(t, incident.FailingHealthCheck, matches[0].Summary, "match should be liveness probe failure")
 }
 
 // Ensure that pods stuck in a generic crash loop are matched by alerting
@@ -57,7 +57,7 @@ func TestEventBackOff1_20(t *testing.T) {
 	assert.Equal(t, 1, len(matches), "only a single match should exist")
 
 	// match should be generic back off error
-	assert.Equal(t, "The application was restarted", matches[0].Summary, "match should be generic back off error")
+	assert.Equal(t, incident.GenericApplicationRestart, matches[0].Summary, "match should be generic back off error")
 }
 
 // Ensure that pods which are killed due to OOM are matched by alerting
@@ -70,7 +70,7 @@ func TestPodOOMKilled1_20(t *testing.T) {
 	assert.Equal(t, 1, len(matches), "only a single match should exist")
 
 	// match should be oom killed
-	assert.Equal(t, "The application ran out of memory", matches[0].Summary, "match should be OOM")
+	assert.Equal(t, incident.OutOfMemory, matches[0].Summary, "match should be OOM")
 }
 
 // Ensure that pods killed due to an app error have events stored
@@ -83,7 +83,7 @@ func TestPodAppError1_20(t *testing.T) {
 	assert.Equal(t, 1, len(matches), "only a single match should exist")
 
 	// match should be app error
-	assert.Equal(t, "The application exited with a non-zero exit code", matches[0].Summary, "match should be app error")
+	assert.Equal(t, incident.NonZeroExitCode, matches[0].Summary, "match should be app error")
 }
 
 // Ensure that pods which are killed due to both app error and then face an image pull error have both events stored
@@ -99,7 +99,7 @@ func TestPodImagePullBackOffAndAppError1_20(t *testing.T) {
 	numProcessed := 0
 
 	for _, match := range matches {
-		if match.Summary == "The application has an invalid image" || match.Summary == "The application exited with a non-zero exit code" {
+		if match.Summary == incident.InvalidImage || match.Summary == incident.NonZeroExitCode {
 			numProcessed++
 		}
 	}
@@ -111,7 +111,7 @@ func get1_20Matches(t *testing.T, events []*event.FilteredEvent) []*incident.Eve
 	matches := make([]*incident.EventMatch, 0)
 
 	for _, event := range events {
-		currMatch := incident.GetEventMatchFromEvent(incident.KubernetesVersion_1_20, event)
+		currMatch := incident.GetEventMatchFromEvent(incident.KubernetesVersion_1_20, nil, event)
 
 		if currMatch != nil {
 			matches = append(matches, currMatch)

@@ -42,10 +42,24 @@ func (r *IncidentRepository) UpdateIncident(incident *models.Incident) (*models.
 	return incident, nil
 }
 
-func (r *IncidentRepository) ListIncidents(opts ...utils.QueryOption) ([]*models.Incident, error) {
+func (r *IncidentRepository) ListIncidents(filter *utils.ListIncidentsFilter, opts ...utils.QueryOption) ([]*models.Incident, error) {
 	var incidents []*models.Incident
 
-	if err := r.db.Scopes(utils.Paginate(opts)).Preload("Events").Find(&incidents).Error; err != nil {
+	db := r.db.Scopes(utils.Paginate(opts))
+
+	if filter.Status != nil {
+		db = db.Where("incident_status = ?", *filter.Status)
+	}
+
+	if filter.ReleaseName != nil {
+		db = db.Where("release_name = ?", *filter.ReleaseName)
+	}
+
+	if filter.ReleaseNamespace != nil {
+		db = db.Where("release_namespace = ?", *filter.ReleaseNamespace)
+	}
+
+	if err := db.Preload("Events").Find(&incidents).Error; err != nil {
 		return nil, err
 	}
 

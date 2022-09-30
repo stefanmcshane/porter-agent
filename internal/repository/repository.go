@@ -9,14 +9,14 @@ type Query struct {
 
 type Repository struct {
 	Incident   *IncidentRepository
-	Event      *EventRepository
+	Event      *IncidentEventRepository
 	EventCache *EventCacheRepository
 }
 
 func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{
 		Incident:   NewIncidentRepository(db),
-		Event:      NewEventRepository(db),
+		Event:      NewIncidentEventRepository(db),
 		EventCache: NewEventCacheRepository(db),
 	}
 }

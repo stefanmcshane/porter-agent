@@ -27,7 +27,7 @@ func (r *EventCacheRepository) CreateEventCache(cache *models.EventCache) (*mode
 func (r *EventCacheRepository) ListEventCachesForEvent(uid string) ([]*models.EventCache, error) {
 	var caches []*models.EventCache
 
-	if err := r.db.Where("event_uid = ? AND timestamp <= ?", uid, time.Now().Add(-time.Hour)).
+	if err := r.db.Debug().Where("event_uid = ? AND timestamp >= ?", uid, time.Now().Add(-time.Hour)).
 		Order("timestamp desc").
 		Find(&caches).Error; err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func (r *EventCacheRepository) ListEventCachesForEvent(uid string) ([]*models.Ev
 func (r *EventCacheRepository) ListEventCachesForPod(name, namespace string) ([]*models.EventCache, error) {
 	var caches []*models.EventCache
 
-	if err := r.db.Where("pod_name = ? AND pod_namespace AND timestamp <= ?", name, namespace, time.Now().Add(-time.Hour)).
+	if err := r.db.Where("pod_name = ? AND pod_namespace AND timestamp >= ?", name, namespace, time.Now().Add(-time.Hour)).
 		Order("timestamp desc").
 		Find(&caches).Error; err != nil {
 		return nil, err
