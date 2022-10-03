@@ -15,6 +15,10 @@ type ListIncidentsHandler struct {
 	repo *repository.Repository
 }
 
+func NewListIncidentsHandler(repo *repository.Repository) *ListIncidentsHandler {
+	return &ListIncidentsHandler{repo}
+}
+
 func (h ListIncidentsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	req := &types.ListIncidentsRequest{}
 
