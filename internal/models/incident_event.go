@@ -40,6 +40,7 @@ type IncidentEvent struct {
 
 func (e *IncidentEvent) ToAPIType() *types.IncidentEvent {
 	return &types.IncidentEvent{
+		ID:           e.UniqueID,
 		LastSeen:     e.LastSeen,
 		PodName:      e.PodName,
 		PodNamespace: e.PodNamespace,

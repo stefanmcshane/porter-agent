@@ -26,7 +26,15 @@ func (r *IncidentRepository) CreateIncident(incident *models.Incident) (*models.
 func (r *IncidentRepository) ReadIncident(uid string) (*models.Incident, error) {
 	incident := &models.Incident{}
 
-	if err := r.db.Preload("Events").Where("unique_id = ?", uid).First(incident).Error; err != nil {
+	if err := r.db.Where("unique_id = ?", uid).First(incident).Error; err != nil {
+		return nil, err
+	}
+
+	if err := r.db.Model(incident).Association("Events").DB.
+		Where("incident_id = ?", incident.ID).
+		Order("last_seen desc").
+		Find(&incident.Events).
+		Error; err != nil {
 		return nil, err
 	}
 
@@ -66,8 +74,18 @@ func (r *IncidentRepository) ListIncidents(
 
 	db = r.db.Scopes(utils.Paginate(opts, db, paginatedResult))
 
-	if err := db.Preload("Events").Find(&incidents).Error; err != nil {
+	if err := db.Find(&incidents).Error; err != nil {
 		return nil, nil, err
+	}
+
+	for _, incident := range incidents {
+		if err := r.db.Model(incident).Association("Events").DB.
+			Where("incident_id = ?", incident.ID).
+			Order("last_seen desc").
+			Find(&incident.Events).
+			Error; err != nil {
+			return nil, nil, err
+		}
 	}
 
 	return incidents, paginatedResult, nil

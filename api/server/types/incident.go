@@ -69,6 +69,7 @@ type Incident struct {
 }
 
 type IncidentEvent struct {
+	ID           string     `json:"id" form:"required"`
 	LastSeen     *time.Time `json:"last_seen" form:"required"`
 	PodName      string     `json:"pod_name" form:"required"`
 	PodNamespace string     `json:"pod_namespace" form:"required"`

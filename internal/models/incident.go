@@ -59,3 +59,19 @@ func (i *Incident) ToAPITypeMeta() *types.IncidentMeta {
 		// Summary: ,
 	}
 }
+
+func (i *Incident) ToAPIType() *types.Incident {
+	incident := &types.Incident{
+		IncidentMeta: i.ToAPITypeMeta(),
+	}
+
+	if len(i.Events) > 0 {
+		incident.Detail = i.Events[0].Detail
+	}
+
+	for _, ev := range i.Events {
+		incident.Pods = append(incident.Pods, ev.PodName)
+	}
+
+	return incident
+}
