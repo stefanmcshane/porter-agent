@@ -1,11 +1,14 @@
 package memorystore
 
 import (
+	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/nxadm/tail"
 	"github.com/porter-dev/porter-agent/pkg/logstore"
@@ -63,7 +66,34 @@ func New(name string, options Options) (*MemoryStore, error) {
 	return store, nil
 }
 
-func (store *MemoryStore) Stream(w logstore.Writer, stopCh <-chan struct{}) error {
+func (store *MemoryStore) Query(options logstore.QueryOptions, w logstore.Writer, stopCh <-chan struct{}) error {
+	logFilePath := store.location
+
+	f, err := os.Open(logFilePath)
+
+	if err != nil {
+		return fmt.Errorf("error querying memory store with name %s. Error: %w", store.name, err)
+	}
+
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+
+	for {
+		if !scanner.Scan() {
+			return nil
+		}
+
+		select {
+		case <-stopCh:
+			return nil
+		default:
+			w.Write(scanner.Text())
+		}
+	}
+}
+
+func (store *MemoryStore) Tail(options logstore.TailOptions, w logstore.Writer, stopCh <-chan struct{}) error {
 	logFilePath := store.location
 
 	t, err := tail.TailFile(logFilePath, tail.Config{Follow: true, Poll: true})
@@ -89,7 +119,7 @@ func (store *MemoryStore) Stream(w logstore.Writer, stopCh <-chan struct{}) erro
 	return nil
 }
 
-func (store *MemoryStore) Push(log string) error {
+func (store *MemoryStore) Push(labels map[string]string, line string, t time.Time) error {
 	logFilePath := store.location
 
 	f, err := os.OpenFile(logFilePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
@@ -100,7 +130,7 @@ func (store *MemoryStore) Push(log string) error {
 
 	defer f.Close()
 
-	if _, err := f.WriteString("\n" + log); err != nil {
+	if _, err := f.WriteString("\n" + line); err != nil {
 		return fmt.Errorf("error pushing log to memory store with name %s. Error: %w", store.name, err)
 	}
 

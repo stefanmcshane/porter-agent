@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"os"
 	"time"
 
@@ -13,6 +14,9 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
+	"github.com/go-chi/render"
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter/api/server/shared/config/env"
 
@@ -26,8 +30,11 @@ import (
 	"github.com/porter-dev/porter-agent/pkg/httpclient"
 	"github.com/porter-dev/porter-agent/pkg/incident"
 	"github.com/porter-dev/porter-agent/pkg/logstore"
+	"github.com/porter-dev/porter-agent/pkg/logstore/lokistore"
 	"github.com/porter-dev/porter-agent/pkg/logstore/memorystore"
 	"github.com/porter-dev/porter-agent/pkg/pulsar"
+
+	incidentHandlers "github.com/porter-dev/porter-agent/api/server/handlers/incident"
 )
 
 var (
@@ -35,9 +42,8 @@ var (
 )
 
 type LogStoreConf struct {
-	LogStoreKind string `env:"LOG_STORE_KIND,default=memory"`
-
-	// TODO: loki environment variables for initialization here
+	LogStoreAddress string `env:"LOG_STORE_ADDRESS,default=:9096`
+	LogStoreKind    string `env:"LOG_STORE_KIND,default=memory"`
 }
 type EnvDecoderConf struct {
 	Debug bool `env:"DEBUG,default=true"`
@@ -74,15 +80,17 @@ func main() {
 	}
 
 	var logStore logstore.LogStore
-
+	var logStoreKind string
 	if envDecoderConf.LogStoreConf.LogStoreKind == "memory" {
+		logStoreKind = "memory"
 		logStore, err = memorystore.New("test", memorystore.Options{})
-
-		if err != nil {
-			l.Fatal().Caller().Msgf("memory-based log store setup failed: %v", err)
-		}
 	} else {
-		l.Fatal().Caller().Msg("loki integration not enabled")
+		logStoreKind = "loki"
+		logStore, err = lokistore.New("test", lokistore.LogStoreConfig{Address: envDecoderConf.LogStoreConf.LogStoreAddress})
+	}
+
+	if err != nil {
+		l.Fatal().Caller().Msgf("%s-based log store setup failed: %v", logStoreKind, err)
 	}
 
 	go cleanupEventCache(db, l)
@@ -147,6 +155,20 @@ func main() {
 	}
 
 	podController.Start()
+
+	r := chi.NewRouter()
+
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Use(render.SetContentType(render.ContentTypeJSON))
+
+	r.Method("GET", "/incidents", incidentHandlers.NewListIncidentsHandler(repo))
+	r.Method("GET", "/incidents/{uid}", incidentHandlers.NewGetIncidentHandler(repo))
+	r.Method("GET", "/incidents/{uid}/events", incidentHandlers.NewListIncidentEventsHandler(repo))
+
+	if err := http.ListenAndServe(":3000", r); err != nil {
+		l.Error().Caller().Msgf("error starting API server: %v", err)
+	}
 }
 
 func cleanupEventCache(db *gorm.DB, l *logger.Logger) {
