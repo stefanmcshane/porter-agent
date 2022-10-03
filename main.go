@@ -42,7 +42,7 @@ var (
 )
 
 type LogStoreConf struct {
-	LogStoreAddress string `env:"LOG_STORE_ADDRESS,default=:9096`
+	LogStoreAddress string `env:"LOG_STORE_ADDRESS,default=:9096"`
 	LogStoreKind    string `env:"LOG_STORE_KIND,default=memory"`
 }
 type EnvDecoderConf struct {
