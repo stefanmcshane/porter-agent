@@ -59,6 +59,7 @@ func matchesToIncidentEvent(k8sVersion KubernetesVersion, es map[event.FilteredE
 		uid, _ := models.GenerateRandomBytes(16)
 
 		res = append(res, models.IncidentEvent{
+			LastSeen:       filteredEvent.Timestamp,
 			UniqueID:       uid,
 			Summary:        string(match.Summary),
 			Detail:         match.DetailGenerator(&filteredEvent),

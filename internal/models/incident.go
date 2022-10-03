@@ -41,6 +41,20 @@ func NewIncident() *Incident {
 }
 
 func (i *Incident) ToAPITypeMeta() *types.IncidentMeta {
+	lastSeen := time.Now()
+
+	if len(i.Events) > 0 {
+		// TODO: get the most recent event, not just the first
+		lastSeen = *i.Events[0].LastSeen
+	}
+
+	// TODO: generate a better summary
+	summary := "The release failed"
+
+	if len(i.Events) > 0 {
+		summary = i.Events[0].Summary
+	}
+
 	return &types.IncidentMeta{
 		ID:                      i.UniqueID,
 		ReleaseName:             i.ReleaseName,
@@ -53,9 +67,34 @@ func (i *Incident) ToAPITypeMeta() *types.IncidentMeta {
 		InvolvedObjectName:      i.InvolvedObjectName,
 		InvolvedObjectNamespace: i.InvolvedObjectNamespace,
 		Severity:                i.Severity,
+		LastSeen:                &lastSeen,
+		Summary:                 summary,
+	}
+}
 
-		// LastSeen: ,
-		// Status: ,
-		// Summary: ,
+func (i *Incident) ToAPIType() *types.Incident {
+	involvedPods := make(map[string]string)
+
+	for _, event := range i.Events {
+		involvedPods[event.PodName] = event.PodName
+	}
+
+	pods := make([]string, 0)
+
+	for podName := range involvedPods {
+		pods = append(pods, podName)
+	}
+
+	// TODO: generate better details
+	detail := "The release failed"
+
+	if len(i.Events) > 0 {
+		detail = i.Events[0].Summary
+	}
+
+	return &types.Incident{
+		IncidentMeta: i.ToAPITypeMeta(),
+		Pods:         pods,
+		Detail:       detail,
 	}
 }

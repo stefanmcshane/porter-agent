@@ -1,6 +1,7 @@
 package alerter
 
 import (
+	"strings"
 	"time"
 
 	"github.com/porter-dev/porter-agent/api/server/types"
@@ -10,17 +11,29 @@ import (
 	"github.com/porter-dev/porter-agent/pkg/httpclient"
 )
 
+type JobAlertConfiguration string
+
+const (
+	JobAlertConfigurationEvery JobAlertConfiguration = "every"
+	JobAlertConfigurationDaily JobAlertConfiguration = "daily"
+)
+
+type AlertConfiguration struct {
+	DefaultJobAlertConfiguration JobAlertConfiguration
+}
+
 type Alerter struct {
-	Client     *httpclient.Client
-	Repository *repository.Repository
-	Logger     *logger.Logger
+	AlertConfiguration *AlertConfiguration
+	Client             *httpclient.Client
+	Repository         *repository.Repository
+	Logger             *logger.Logger
 }
 
 func (a *Alerter) HandleIncident(incident *models.Incident) error {
 	switch incident.Severity {
 	case types.SeverityCritical:
 		if a.shouldAlertCritical(incident) {
-			err := a.Client.NotifyNew(incident.ToAPITypeMeta())
+			err := a.Client.NotifyNew(incident.ToAPIType())
 			if err != nil {
 				return err
 			}
@@ -31,7 +44,7 @@ func (a *Alerter) HandleIncident(incident *models.Incident) error {
 		return nil
 	case types.SeverityNormal:
 		if a.shouldAlertNormal(incident) {
-			err := a.Client.NotifyNew(incident.ToAPITypeMeta())
+			err := a.Client.NotifyNew(incident.ToAPIType())
 
 			if err != nil {
 				return err
@@ -48,7 +61,7 @@ func (a *Alerter) HandleResolved(incident *models.Incident) error {
 	switch incident.Severity {
 	case types.SeverityCritical:
 		// if this is a critical incident, alert immediately
-		return a.Client.NotifyResolved(incident.ToAPITypeMeta())
+		return a.Client.NotifyResolved(incident.ToAPIType())
 	case types.SeverityNormal:
 		// if this is a non-critical incident do nothing
 	}
@@ -71,6 +84,11 @@ func (a *Alerter) shouldAlertCritical(incident *models.Incident) bool {
 // for non-critical incidents, alert every day
 func (a *Alerter) shouldAlertNormal(incident *models.Incident) bool {
 	if incident.LastAlerted == nil {
+		return true
+	}
+
+	// if this is a job alert, check the alerter configuration
+	if strings.ToLower(string(incident.InvolvedObjectKind)) == "job" && a.AlertConfiguration.DefaultJobAlertConfiguration == JobAlertConfigurationEvery {
 		return true
 	}
 
