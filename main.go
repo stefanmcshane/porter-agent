@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"os"
 	"time"
 
@@ -13,6 +14,9 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
+	"github.com/go-chi/render"
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter/api/server/shared/config/env"
 
@@ -29,6 +33,8 @@ import (
 	"github.com/porter-dev/porter-agent/pkg/logstore/lokistore"
 	"github.com/porter-dev/porter-agent/pkg/logstore/memorystore"
 	"github.com/porter-dev/porter-agent/pkg/pulsar"
+
+	incidentHandlers "github.com/porter-dev/porter-agent/api/server/handlers/incident"
 )
 
 var (
@@ -149,6 +155,20 @@ func main() {
 	}
 
 	podController.Start()
+
+	r := chi.NewRouter()
+
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Use(render.SetContentType(render.ContentTypeJSON))
+
+	r.Method("GET", "/incidents", incidentHandlers.NewListIncidentsHandler(repo))
+	r.Method("GET", "/incidents/{uid}", incidentHandlers.NewGetIncidentHandler(repo))
+	r.Method("GET", "/incidents/{uid}/events", incidentHandlers.NewListIncidentEventsHandler(repo))
+
+	if err := http.ListenAndServe(":3000", r); err != nil {
+		l.Error().Caller().Msgf("error starting API server: %v", err)
+	}
 }
 
 func cleanupEventCache(db *gorm.DB, l *logger.Logger) {

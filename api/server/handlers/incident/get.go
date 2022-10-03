@@ -16,6 +16,10 @@ type GetIncidentHandler struct {
 	repo *repository.Repository
 }
 
+func NewGetIncidentHandler(repo *repository.Repository) *GetIncidentHandler {
+	return &GetIncidentHandler{repo}
+}
+
 func (h GetIncidentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	incidentUID := chi.URLParam(r, "uid")
 
