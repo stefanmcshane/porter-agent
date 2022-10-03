@@ -1,11 +1,19 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"time"
+
+	"github.com/porter-dev/porter-agent/api/server/types"
+	"gorm.io/gorm"
+)
 
 type IncidentEvent struct {
 	gorm.Model
 
-	UniqueID string `gorm:"unique"`
+	UniqueID   string `gorm:"unique"`
+	IncidentID uint
+
+	LastSeen *time.Time
 
 	// Each incident event corresponds to a single pod name and namespace.
 	PodName      string
@@ -28,4 +36,15 @@ type IncidentEvent struct {
 	// When taken together, the pod owner, summary, and primary cause field determine whether two events should be
 	// considered part of the same incident, or considered two different incidents.
 	IsPrimaryCause bool
+}
+
+func (e *IncidentEvent) ToAPIType() *types.IncidentEvent {
+	return &types.IncidentEvent{
+		ID:           e.UniqueID,
+		LastSeen:     e.LastSeen,
+		PodName:      e.PodName,
+		PodNamespace: e.PodNamespace,
+		Summary:      e.Summary,
+		Detail:       e.Detail,
+	}
 }

@@ -1,0 +1,27 @@
+on:
+  push:
+    branches:
+      - "v3/main"
+name: Create a v3 release of porter-agent
+jobs:
+  docker-build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2.3.4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+      - name: Login to ECR public
+        id: login-ecr
+        run: |
+          aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/o1j4x7p4
+      - name: Build
+        run: |
+          docker build -t public.ecr.aws/o1j4x7p4/porter-agent:v3 .
+      - name: Push
+        run: |
+          docker push public.ecr.aws/o1j4x7p4/porter-agent:v3

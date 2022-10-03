@@ -6,10 +6,10 @@ import "time"
 // pulses at the configured time intervals. It
 // can be used under any piece of code that needs
 // to periodically execute.
-// We can use it in the followinig way:
+// We can use it in the following way:
 //	p := pulsar.NewPulsar(1, time.Second)	// pulse every 1 second
 //	for pulse := range p.Pulsate() {
-//		fmt.Println("received a pluse", pulse)
+//		fmt.Println("received a pulse", pulse)
 //	}
 //
 type Pulsar struct {

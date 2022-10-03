@@ -26,7 +26,15 @@ func (r *IncidentRepository) CreateIncident(incident *models.Incident) (*models.
 func (r *IncidentRepository) ReadIncident(uid string) (*models.Incident, error) {
 	incident := &models.Incident{}
 
-	if err := r.db.Preload("Events").Where("unique_id = ?", uid).First(incident).Error; err != nil {
+	if err := r.db.Where("unique_id = ?", uid).First(incident).Error; err != nil {
+		return nil, err
+	}
+
+	if err := r.db.Model(incident).Association("Events").DB.
+		Where("incident_id = ?", incident.ID).
+		Order("last_seen desc").
+		Find(&incident.Events).
+		Error; err != nil {
 		return nil, err
 	}
 
@@ -42,14 +50,45 @@ func (r *IncidentRepository) UpdateIncident(incident *models.Incident) (*models.
 	return incident, nil
 }
 
-func (r *IncidentRepository) ListIncidents(opts ...utils.QueryOption) ([]*models.Incident, error) {
+func (r *IncidentRepository) ListIncidents(
+	filter *utils.ListIncidentsFilter,
+	opts ...utils.QueryOption,
+) ([]*models.Incident, *utils.PaginatedResult, error) {
 	var incidents []*models.Incident
 
-	if err := r.db.Scopes(utils.Paginate(opts)).Preload("Events").Find(&incidents).Error; err != nil {
-		return nil, err
+	db := r.db
+
+	if filter.Status != nil {
+		db = db.Where("incident_status = ?", *filter.Status)
 	}
 
-	return incidents, nil
+	if filter.ReleaseName != nil {
+		db = db.Where("release_name = ?", *filter.ReleaseName)
+	}
+
+	if filter.ReleaseNamespace != nil {
+		db = db.Where("release_namespace = ?", *filter.ReleaseNamespace)
+	}
+
+	paginatedResult := &utils.PaginatedResult{}
+
+	db = r.db.Scopes(utils.Paginate(opts, db, paginatedResult))
+
+	if err := db.Find(&incidents).Error; err != nil {
+		return nil, nil, err
+	}
+
+	for _, incident := range incidents {
+		if err := r.db.Model(incident).Association("Events").DB.
+			Where("incident_id = ?", incident.ID).
+			Order("last_seen desc").
+			Find(&incident.Events).
+			Error; err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return incidents, paginatedResult, nil
 }
 
 func (r *IncidentRepository) DeleteIncident(uid string) error {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"k8s.io/client-go/rest"
@@ -14,4 +15,8 @@ func main() {
 	}
 
 	log.Println(conf.Host)
+
+	for {
+		fmt.Println("example log file!")
+	}
 }

@@ -6,31 +6,52 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/porter-dev/porter-agent/api/server/types"
+	"github.com/porter-dev/porter-agent/internal/logger"
 )
 
-type ClientOptions struct{}
-
-type Client struct {
-	client *http.Client
-	token  string
-	host   string
+type HTTPClientConf struct {
+	PorterHost  string `env:"PORTER_HOST"`
+	PorterToken string `env:"PORTER_TOKEN"`
+	ClusterID   string `env:"CLUSTER_ID"`
+	ProjectID   string `env:"PROJECT_ID"`
 }
 
-func NewClient(host, token string) *Client {
+type Client struct {
+	client               *http.Client
+	token                string
+	host                 string
+	projectID, clusterID string
+	logger               *logger.Logger
+}
+
+func NewClient(conf *HTTPClientConf, logger *logger.Logger) *Client {
 	return &Client{
 		client: &http.Client{
 			Timeout: 3 * time.Second,
 		},
-		token: token,
-		host:  host,
+		token:     conf.PorterToken,
+		host:      conf.PorterHost,
+		projectID: conf.ProjectID,
+		clusterID: conf.ClusterID,
+		logger:    logger,
 	}
 }
 
-func (c *Client) Get(url string, options ...ClientOptions) (*http.Response, error) {
-	return c.client.Get(fmt.Sprintf("%s%s", c.host, url))
+func (c *Client) NotifyNew(incident *types.IncidentMeta) error {
+	_, err := c.post(fmt.Sprintf("/api/projects/%s/clusters/%s/incidents/notify_new", c.projectID, c.clusterID), incident)
+
+	return err
 }
 
-func (c *Client) Post(path string, body interface{}) (*http.Response, error) {
+func (c *Client) NotifyResolved(incident *types.IncidentMeta) error {
+	_, err := c.post(fmt.Sprintf("/api/projects/%s/clusters/%s/incidents/notify_resolved", c.projectID, c.clusterID), incident)
+
+	return err
+}
+
+func (c *Client) post(path string, body interface{}) (*http.Response, error) {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
