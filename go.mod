@@ -8,6 +8,7 @@ require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/porter-dev/porter v0.38.0
 	github.com/spf13/viper v1.13.0
+	google.golang.org/grpc v1.49.0
 	gorm.io/driver/postgres v1.3.10
 	gorm.io/driver/sqlite v1.1.3
 	gorm.io/gorm v1.23.10
@@ -17,7 +18,10 @@ require (
 	sigs.k8s.io/controller-runtime v0.13.0
 )
 
-require github.com/pmezard/go-difflib v1.0.0 // indirect
+require (
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	google.golang.org/genproto v0.0.0-20220628213854-d9e0b6570c03 // indirect
+)
 
 require (
 	cloud.google.com/go/compute v1.7.0 // indirect
@@ -102,7 +106,7 @@ require (
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/protobuf v1.28.1 // indirect
+	google.golang.org/protobuf v1.28.1
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
