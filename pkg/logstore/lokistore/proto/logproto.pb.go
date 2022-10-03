@@ -7,7 +7,6 @@
 package proto
 
 import (
-	_ "github.com/porter-dev/porter-agent/pkg/logstore/lokistore/proto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"

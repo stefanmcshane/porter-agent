@@ -73,36 +73,11 @@ func (i *Incident) ToAPITypeMeta() *types.IncidentMeta {
 }
 
 func (i *Incident) ToAPIType() *types.Incident {
-	involvedPods := make(map[string]string)
-
-	for _, event := range i.Events {
-		involvedPods[event.PodName] = event.PodName
-	}
-
-	pods := make([]string, 0)
-
-	for podName := range involvedPods {
-		pods = append(pods, podName)
-	}
-
-	// TODO: generate better details
-	detail := "The release failed"
-
-	if len(i.Events) > 0 {
-		detail = i.Events[0].Summary
-	}
-
-	return &types.Incident{
-		IncidentMeta: i.ToAPITypeMeta(),
-		Pods:         pods,
-		Detail:       detail,
-	}
-}
-
-func (i *Incident) ToAPIType() *types.Incident {
 	incident := &types.Incident{
 		IncidentMeta: i.ToAPITypeMeta(),
 	}
+
+	incident.Detail = "The release failed"
 
 	if len(i.Events) > 0 {
 		incident.Detail = i.Events[0].Detail
