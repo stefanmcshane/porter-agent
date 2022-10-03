@@ -30,6 +30,7 @@ import (
 	"github.com/porter-dev/porter-agent/pkg/httpclient"
 	"github.com/porter-dev/porter-agent/pkg/incident"
 	"github.com/porter-dev/porter-agent/pkg/logstore"
+	"github.com/porter-dev/porter-agent/pkg/logstore/lokistore"
 	"github.com/porter-dev/porter-agent/pkg/logstore/memorystore"
 	"github.com/porter-dev/porter-agent/pkg/pulsar"
 
@@ -41,9 +42,8 @@ var (
 )
 
 type LogStoreConf struct {
-	LogStoreKind string `env:"LOG_STORE_KIND,default=memory"`
-
-	// TODO: loki environment variables for initialization here
+	LogStoreAddress string `env:"LOG_STORE_ADDRESS,default=:9096`
+	LogStoreKind    string `env:"LOG_STORE_KIND,default=memory"`
 }
 type EnvDecoderConf struct {
 	Debug bool `env:"DEBUG,default=true"`
@@ -80,15 +80,17 @@ func main() {
 	}
 
 	var logStore logstore.LogStore
-
+	var logStoreKind string
 	if envDecoderConf.LogStoreConf.LogStoreKind == "memory" {
+		logStoreKind = "memory"
 		logStore, err = memorystore.New("test", memorystore.Options{})
-
-		if err != nil {
-			l.Fatal().Caller().Msgf("memory-based log store setup failed: %v", err)
-		}
 	} else {
-		l.Fatal().Caller().Msg("loki integration not enabled")
+		logStoreKind = "loki"
+		logStore, err = lokistore.New("test", lokistore.LogStoreConfig{Address: envDecoderConf.LogStoreConf.LogStoreAddress})
+	}
+
+	if err != nil {
+		l.Fatal().Caller().Msgf("%s-based log store setup failed: %v", logStoreKind, err)
 	}
 
 	go cleanupEventCache(db, l)
