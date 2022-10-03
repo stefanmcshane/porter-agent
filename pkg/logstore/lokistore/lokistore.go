@@ -69,11 +69,7 @@ func (store *LokiStore) Push(labels map[string]string, line string, t time.Time)
 }
 
 func (store *LokiStore) Query(options logstore.QueryOptions, w logstore.Writer, stopCh <-chan struct{}) error {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	defer cancel()
-
-	stream, err := store.querierClient.Query(ctx, &proto.QueryRequest{
+	stream, err := store.querierClient.Query(context.Background(), &proto.QueryRequest{
 		Selector: logstore.LabelsMapToString(options.Labels, "=~"),
 		Start:    timestamppb.New(options.Start),
 		End:      timestamppb.New(options.End),
@@ -84,44 +80,33 @@ func (store *LokiStore) Query(options logstore.QueryOptions, w logstore.Writer, 
 		return fmt.Errorf("error querying logs from loki store with name %s. Error: %w", store.name, err)
 	}
 
-	go func(ctx context.Context) {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				resp, err := stream.Recv()
+	for {
+		select {
+		case <-stopCh:
+			return nil
+		default:
+			resp, err := stream.Recv()
 
-				for _, s := range resp.GetStreams() {
-					for _, entry := range s.GetEntries() {
-						w.Write(entry.Line)
-					}
+			for _, s := range resp.GetStreams() {
+				for _, entry := range s.GetEntries() {
+					w.Write(entry.Line)
 				}
-
-				if err == io.EOF {
-					return
-				}
-
-				if err != nil {
-					return
-				}
-
 			}
+
+			if err == io.EOF {
+				return nil
+			}
+
+			if err != nil {
+				return err
+			}
+
 		}
-	}(ctx)
-
-	<-stopCh
-	cancel()
-
-	return nil
+	}
 }
 
 func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, stopCh <-chan struct{}) error {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	defer cancel()
-
-	stream, err := store.querierClient.Tail(ctx, &proto.TailRequest{
+	stream, err := store.querierClient.Tail(context.Background(), &proto.TailRequest{
 		Query: logstore.LabelsMapToString(options.Labels, "=~"),
 		Start: timestamppb.New(options.Start),
 		Limit: options.Limit,
@@ -131,34 +116,27 @@ func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, st
 		return fmt.Errorf("error streaming logs from loki store with name %s. Error: %w", store.name, err)
 	}
 
-	go func(ctx context.Context) {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				resp, err := stream.Recv()
+	for {
+		select {
+		case <-stopCh:
+			return nil
+		default:
+			resp, err := stream.Recv()
 
-				entries := resp.Stream.GetEntries()
+			entries := resp.Stream.GetEntries()
 
-				for _, entry := range entries {
-					w.Write(entry.GetLine())
-				}
-
-				if err == io.EOF {
-					return
-				}
-
-				if err != nil {
-					return
-				}
-
+			for _, entry := range entries {
+				w.Write(entry.GetLine())
 			}
+
+			if err == io.EOF {
+				return nil
+			}
+
+			if err != nil {
+				return err
+			}
+
 		}
-	}(ctx)
-
-	<-stopCh
-	cancel()
-
-	return nil
+	}
 }

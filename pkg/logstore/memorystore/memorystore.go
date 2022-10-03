@@ -77,28 +77,20 @@ func (store *MemoryStore) Query(options logstore.QueryOptions, w logstore.Writer
 
 	defer f.Close()
 
-	ctx, cancel := context.WithCancel((context.Background()))
 	scanner := bufio.NewScanner(f)
 
-	go func(ctx context.Context) {
-		for {
-			if !scanner.Scan() {
-				break
-			}
-
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				w.Write(scanner.Text())
-			}
-
+	for {
+		if !scanner.Scan() {
+			return nil
 		}
-	}(ctx)
 
-	<-stopCh
-	cancel()
-	return nil
+		select {
+		case <-stopCh:
+			return nil
+		default:
+			w.Write(scanner.Text())
+		}
+	}
 }
 
 func (store *MemoryStore) Tail(options logstore.TailOptions, w logstore.Writer, stopCh <-chan struct{}) error {
@@ -138,7 +130,7 @@ func (store *MemoryStore) Push(labels map[string]string, line string, t time.Tim
 
 	defer f.Close()
 
-	if _, err := f.WriteString("\n" + log); err != nil {
+	if _, err := f.WriteString("\n" + line); err != nil {
 		return fmt.Errorf("error pushing log to memory store with name %s. Error: %w", store.name, err)
 	}
 
