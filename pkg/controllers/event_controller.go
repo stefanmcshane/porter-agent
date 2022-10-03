@@ -93,7 +93,8 @@ func (e *EventController) processEvent(k8sEvent *v1.Event) error {
 
 	// store the event via the log store
 	if serializedEvent, err := serializeEvent(k8sEvent); err == nil {
-		err = e.LogStore.Push(serializedEvent)
+		// TODO: add labels here
+		err = e.LogStore.Push(map[string]string{}, serializedEvent, time.Now())
 
 		if err != nil {
 			e.Logger.Error().Caller().Msgf("could not push serialized event to log store: %v", err)
