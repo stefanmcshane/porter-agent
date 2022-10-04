@@ -7,6 +7,7 @@ type GetLogRequest struct {
 	StartRange  *time.Time `schema:"start_range"`
 	EndRange    *time.Time `schema:"end_range"`
 	PodSelector string     `schema:"pod_selector" form:"required"`
+	Namespace   string     `schema:"namespace" form:"required"`
 }
 
 type LogLine struct {
