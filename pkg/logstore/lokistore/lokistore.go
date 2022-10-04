@@ -108,7 +108,7 @@ func (store *LokiStore) Query(options logstore.QueryOptions, w logstore.Writer, 
 
 func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, stopCh <-chan struct{}) error {
 	stream, err := store.querierClient.Tail(context.Background(), &proto.TailRequest{
-		Query: logstore.LabelsMapToString(options.Labels, "=~"),
+		// Query: logstore.LabelsMapToString(options.Labels, "=~"),
 		Start: timestamppb.New(options.Start),
 		Limit: options.Limit,
 	})
