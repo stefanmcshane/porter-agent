@@ -145,7 +145,7 @@ func main() {
 		Logger:           l,
 	}
 
-	podController.Start()
+	go podController.Start()
 
 	conf, err := config.GetConfig(&envDecoderConf, repo, logStore)
 
