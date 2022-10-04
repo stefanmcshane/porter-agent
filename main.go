@@ -77,6 +77,7 @@ func main() {
 		logStore, err = memorystore.New("test", memorystore.Options{})
 	} else {
 		logStoreKind = "loki"
+		lokistore.SetupLokiStatus(envDecoderConf.LogStoreConf.LogStoreAddress)
 		logStore, err = lokistore.New("test", lokistore.LogStoreConfig{Address: envDecoderConf.LogStoreConf.LogStoreAddress})
 	}
 

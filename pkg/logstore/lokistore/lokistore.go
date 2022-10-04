@@ -9,6 +9,7 @@ import (
 	"github.com/porter-dev/porter-agent/pkg/logstore"
 	"github.com/porter-dev/porter-agent/pkg/logstore/lokistore/proto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -31,7 +32,7 @@ func New(name string, config LogStoreConfig) (*LokiStore, error) {
 		address = ":3100"
 	}
 
-	conn, err := grpc.Dial(address, grpc.WithInsecure())
+	conn, err := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
 	if err != nil {
 		return nil, fmt.Errorf("error initializing loki client with name %s. Error: %w", name, err)
