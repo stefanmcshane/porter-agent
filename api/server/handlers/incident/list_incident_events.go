@@ -32,7 +32,9 @@ func (h ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	req := &types.ListIncidentEventsRequest{}
+	req := &types.ListIncidentEventsRequest{
+		PaginationRequest: &types.PaginationRequest{},
+	}
 
 	err := schema.NewDecoder().Decode(req, r.URL.Query())
 

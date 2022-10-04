@@ -20,7 +20,9 @@ func NewListIncidentsHandler(repo *repository.Repository) *ListIncidentsHandler 
 }
 
 func (h ListIncidentsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	req := &types.ListIncidentsRequest{}
+	req := &types.ListIncidentsRequest{
+		PaginationRequest: &types.PaginationRequest{},
+	}
 
 	err := schema.NewDecoder().Decode(req, r.URL.Query())
 
