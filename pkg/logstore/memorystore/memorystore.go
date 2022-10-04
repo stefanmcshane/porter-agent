@@ -87,7 +87,8 @@ func (store *MemoryStore) Query(options logstore.QueryOptions, w logstore.Writer
 		case <-stopCh:
 			return nil
 		default:
-			w.Write(scanner.Text())
+			t := time.Now()
+			w.Write(&t, scanner.Text())
 		}
 	}
 }
@@ -107,7 +108,8 @@ func (store *MemoryStore) Tail(options logstore.TailOptions, w logstore.Writer, 
 				continue
 			}
 
-			w.Write(line.Text)
+			t := time.Now()
+			w.Write(&t, line.Text)
 		}
 	}(t)
 

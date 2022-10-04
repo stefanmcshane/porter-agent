@@ -3,7 +3,7 @@ package logstore
 import "time"
 
 type Writer interface {
-	Write(log string) error
+	Write(timestamp *time.Time, log string) error
 }
 
 type TailOptions struct {

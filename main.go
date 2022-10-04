@@ -17,8 +17,8 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
+	"github.com/porter-dev/porter-agent/internal/envconf"
 	"github.com/porter-dev/porter-agent/internal/models"
-	"github.com/porter-dev/porter/api/server/shared/config/env"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joeshaw/envdecode"
@@ -34,29 +34,19 @@ import (
 	"github.com/porter-dev/porter-agent/pkg/logstore/memorystore"
 	"github.com/porter-dev/porter-agent/pkg/pulsar"
 
+	"github.com/porter-dev/porter-agent/api/server/config"
 	incidentHandlers "github.com/porter-dev/porter-agent/api/server/handlers/incident"
+	logHandlers "github.com/porter-dev/porter-agent/api/server/handlers/log"
 )
 
 var (
 	httpServer *gin.Engine
 )
 
-type LogStoreConf struct {
-	LogStoreAddress string `env:"LOG_STORE_ADDRESS,default=:9096"`
-	LogStoreKind    string `env:"LOG_STORE_KIND,default=memory"`
-}
-type EnvDecoderConf struct {
-	Debug bool `env:"DEBUG,default=true"`
-
-	LogStoreConf   LogStoreConf
-	HTTPClientConf httpclient.HTTPClientConf
-	DBConf         env.DBConf
-}
-
 func main() {
 	kubeClient := kubernetes.NewForConfigOrDie(ctrl.GetConfigOrDie())
 
-	var envDecoderConf EnvDecoderConf = EnvDecoderConf{}
+	var envDecoderConf envconf.EnvDecoderConf = envconf.EnvDecoderConf{}
 
 	if err := envdecode.StrictDecode(&envDecoderConf); err != nil {
 		logger.NewErrorConsole(true).Fatal().Caller().Msgf("could not decode env conf: %v", err)
@@ -156,6 +146,12 @@ func main() {
 
 	podController.Start()
 
+	conf, err := config.GetConfig(&envDecoderConf, repo, logStore)
+
+	if err != nil {
+		l.Fatal().Caller().Msgf("server config loading failed: %v", err)
+	}
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
@@ -165,6 +161,8 @@ func main() {
 	r.Method("GET", "/incidents", incidentHandlers.NewListIncidentsHandler(repo))
 	r.Method("GET", "/incidents/{uid}", incidentHandlers.NewGetIncidentHandler(repo))
 	r.Method("GET", "/incidents/{uid}/events", incidentHandlers.NewListIncidentEventsHandler(repo))
+
+	r.Method("GET", "/logs", logHandlers.NewGetLogHandler(conf))
 
 	if err := http.ListenAndServe(":3000", r); err != nil {
 		l.Error().Caller().Msgf("error starting API server: %v", err)

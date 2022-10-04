@@ -89,7 +89,8 @@ func (store *LokiStore) Query(options logstore.QueryOptions, w logstore.Writer, 
 
 			for _, s := range resp.GetStreams() {
 				for _, entry := range s.GetEntries() {
-					w.Write(entry.Line)
+					t := entry.Timestamp.AsTime()
+					w.Write(&t, entry.Line)
 				}
 			}
 
@@ -126,7 +127,8 @@ func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, st
 			entries := resp.Stream.GetEntries()
 
 			for _, entry := range entries {
-				w.Write(entry.GetLine())
+				t := entry.Timestamp.AsTime()
+				w.Write(&t, entry.Line)
 			}
 
 			if err == io.EOF {
