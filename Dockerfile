@@ -30,15 +30,15 @@ RUN go build -a -o ./bin/agent-cli ./cli
 # Deployment environment
 # ----------------------
 FROM alpine
-RUN apk update
+RUN apk update && apk add --no-cache curl
 
 COPY --from=build-go /porter/bin/agent /porter/
 COPY --from=build-go /porter/bin/agent-cli /porter/
 
-ENV SERVER_PORT=8080
+ENV SERVER_PORT=10001
 ENV SERVER_TIMEOUT_READ=5s
 ENV SERVER_TIMEOUT_WRITE=10s
 ENV SERVER_TIMEOUT_IDLE=15s
 
-EXPOSE 8080
+EXPOSE 10001
 CMD /porter/agent
