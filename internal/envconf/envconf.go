@@ -10,9 +10,10 @@ type LogStoreConf struct {
 	LogStoreKind    string `env:"LOG_STORE_KIND,default=memory"`
 }
 type EnvDecoderConf struct {
-	Debug     bool   `env:"DEBUG,default=true"`
-	SentryDSN string `env:"SENTRY_DSN"`
-	SentryEnv string `env:"SENTRY_ENV,default=dev"`
+	Debug      bool   `env:"DEBUG,default=true"`
+	SentryDSN  string `env:"SENTRY_DSN"`
+	SentryEnv  string `env:"SENTRY_ENV,default=dev"`
+	ServerPort uint   `env:"SERVER_PORT,default=10001"`
 
 	LogStoreConf   LogStoreConf
 	HTTPClientConf httpclient.HTTPClientConf
