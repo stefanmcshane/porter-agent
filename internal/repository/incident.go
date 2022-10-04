@@ -26,15 +26,9 @@ func (r *IncidentRepository) CreateIncident(incident *models.Incident) (*models.
 func (r *IncidentRepository) ReadIncident(uid string) (*models.Incident, error) {
 	incident := &models.Incident{}
 
-	if err := r.db.Where("unique_id = ?", uid).First(incident).Error; err != nil {
-		return nil, err
-	}
-
-	if err := r.db.Model(incident).Association("Events").DB.
-		Where("id = ?", incident.ID).
-		Order("last_seen desc").
-		Find(&incident.Events).
-		Error; err != nil {
+	if err := r.db.Preload("Events", func(db *gorm.DB) *gorm.DB {
+		return db.Order("incident_events.last_seen DESC")
+	}).Where("unique_id = ?", uid).First(incident).Error; err != nil {
 		return nil, err
 	}
 
@@ -56,7 +50,7 @@ func (r *IncidentRepository) ListIncidents(
 ) ([]*models.Incident, *utils.PaginatedResult, error) {
 	var incidents []*models.Incident
 
-	db := r.db
+	db := r.db.Model(&models.Incident{})
 
 	if filter.Status != nil {
 		db = db.Where("incident_status = ?", *filter.Status)
@@ -72,20 +66,12 @@ func (r *IncidentRepository) ListIncidents(
 
 	paginatedResult := &utils.PaginatedResult{}
 
-	db = r.db.Scopes(utils.Paginate(opts, db, paginatedResult))
+	db = db.Scopes(utils.Paginate(opts, db, paginatedResult))
 
-	if err := db.Find(&incidents).Error; err != nil {
+	if err := db.Preload("Events", func(db *gorm.DB) *gorm.DB {
+		return db.Order("incident_events.last_seen DESC")
+	}).Find(&incidents).Error; err != nil {
 		return nil, nil, err
-	}
-
-	for _, incident := range incidents {
-		if err := r.db.Model(incident).Association("Events").DB.
-			Where("id = ?", incident.ID).
-			Order("last_seen desc").
-			Find(&incident.Events).
-			Error; err != nil {
-			return nil, nil, err
-		}
 	}
 
 	return incidents, paginatedResult, nil
