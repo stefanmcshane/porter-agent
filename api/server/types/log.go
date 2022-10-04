@@ -6,6 +6,7 @@ type GetLogRequest struct {
 	Limit      uint       `json:"limit"`
 	StartRange *time.Time `json:"start_range"`
 	EndRange   *time.Time `json:"end_range"`
+	Pods       []string   `json:"pods"`
 }
 
 type LogLine struct {
