@@ -31,7 +31,7 @@ func (r *IncidentRepository) ReadIncident(uid string) (*models.Incident, error) 
 	}
 
 	if err := r.db.Model(incident).Association("Events").DB.
-		Where("incident_id = ?", incident.ID).
+		Where("id = ?", incident.ID).
 		Order("last_seen desc").
 		Find(&incident.Events).
 		Error; err != nil {
@@ -80,7 +80,7 @@ func (r *IncidentRepository) ListIncidents(
 
 	for _, incident := range incidents {
 		if err := r.db.Model(incident).Association("Events").DB.
-			Where("incident_id = ?", incident.ID).
+			Where("id = ?", incident.ID).
 			Order("last_seen desc").
 			Find(&incident.Events).
 			Error; err != nil {
