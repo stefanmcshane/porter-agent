@@ -2,7 +2,6 @@ package log
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/porter-dev/porter-agent/api/server/config"
@@ -42,7 +41,7 @@ func (h *GetLogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		End:   *req.EndRange,
 		Limit: uint32(req.Limit),
 		Labels: map[string]string{
-			"pod": strings.Join(req.Pods, "|"),
+			"pod": req.PodSelector,
 		},
 	}, lb, stopCh)
 

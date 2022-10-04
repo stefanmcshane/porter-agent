@@ -3,10 +3,10 @@ package types
 import "time"
 
 type GetLogRequest struct {
-	Limit      uint       `json:"limit"`
-	StartRange *time.Time `json:"start_range"`
-	EndRange   *time.Time `json:"end_range"`
-	Pods       []string   `json:"pods"`
+	Limit       uint       `json:"limit"`
+	StartRange  *time.Time `json:"start_range"`
+	EndRange    *time.Time `json:"end_range"`
+	PodSelector string     `json:"pods"`
 }
 
 type LogLine struct {
