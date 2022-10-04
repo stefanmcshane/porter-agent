@@ -39,7 +39,7 @@ func (r *IncidentEventRepository) ListEvents(
 ) ([]*models.IncidentEvent, *utils.PaginatedResult, error) {
 	var events []*models.IncidentEvent
 
-	db := r.db
+	db := r.db.Model(&models.IncidentEvent{})
 
 	if filter.IncidentID != nil {
 		db = db.Where("id = ?", *filter.IncidentID)
@@ -63,7 +63,7 @@ func (r *IncidentEventRepository) ListEvents(
 
 	paginatedResult := &utils.PaginatedResult{}
 
-	db = r.db.Scopes(utils.Paginate(opts, db, paginatedResult))
+	db = db.Scopes(utils.Paginate(opts, db, paginatedResult))
 
 	if err := db.Find(&events).Error; err != nil {
 		return nil, nil, err
