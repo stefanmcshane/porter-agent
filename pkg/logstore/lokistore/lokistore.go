@@ -71,10 +71,11 @@ func (store *LokiStore) Push(labels map[string]string, line string, t time.Time)
 
 func (store *LokiStore) Query(options logstore.QueryOptions, w logstore.Writer, stopCh <-chan struct{}) error {
 	stream, err := store.querierClient.Query(context.Background(), &proto.QueryRequest{
-		Selector: logstore.LabelsMapToString(options.Labels, "=~"),
-		Start:    timestamppb.New(options.Start),
-		End:      timestamppb.New(options.End),
-		Limit:    options.Limit,
+		Selector:  logstore.LabelsMapToString(options.Labels, "=~"),
+		Start:     timestamppb.New(options.Start),
+		End:       timestamppb.New(options.End),
+		Limit:     options.Limit,
+		Direction: proto.Direction_BACKWARD,
 	})
 
 	if err != nil {
