@@ -94,7 +94,7 @@ func main() {
 		Labels:               labelsMap,
 		Start:                startTime,
 		Limit:                limit,
-		CustomSelectorSuffix: "event_store!=true",
+		CustomSelectorSuffix: "event_store!=\"true\"",
 	}, w, stopChan); err != nil {
 		l.Fatal().Caller().Msgf("could not tail logs: %v", err)
 	}

@@ -36,6 +36,7 @@ import (
 	"github.com/porter-dev/porter-agent/pkg/pulsar"
 
 	"github.com/porter-dev/porter-agent/api/server/config"
+	eventHandlers "github.com/porter-dev/porter-agent/api/server/handlers/event"
 	incidentHandlers "github.com/porter-dev/porter-agent/api/server/handlers/incident"
 	logHandlers "github.com/porter-dev/porter-agent/api/server/handlers/log"
 )
@@ -167,6 +168,7 @@ func main() {
 	r.Method("GET", "/incidents/{uid}/events", incidentHandlers.NewListIncidentEventsHandler(repo))
 
 	r.Method("GET", "/logs", logHandlers.NewGetLogHandler(conf))
+	r.Method("GET", "/events", eventHandlers.NewGetEventHandler(conf))
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", envDecoderConf.ServerPort), r); err != nil {
 		l.Error().Caller().Msgf("error starting API server: %v", err)
