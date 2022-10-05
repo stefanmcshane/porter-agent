@@ -160,6 +160,8 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 
+	r.Mount("/debug", middleware.Profiler())
+
 	r.Method("GET", "/incidents", incidentHandlers.NewListIncidentsHandler(repo))
 	r.Method("GET", "/incidents/{uid}", incidentHandlers.NewGetIncidentHandler(repo))
 	r.Method("GET", "/incidents/{uid}/events", incidentHandlers.NewListIncidentEventsHandler(repo))
