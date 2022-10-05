@@ -152,3 +152,18 @@ func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, st
 		}
 	}
 }
+
+func (store *LokiStore) GetLabelValues(options logstore.LabelValueOptions) ([]string, error) {
+	labelValues, err := store.querierClient.Label(context.Background(), &proto.LabelRequest{
+		Name:   options.Label,
+		Values: true,
+		Start:  timestamppb.New(options.Start),
+		End:    timestamppb.New(options.End),
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return labelValues.GetValues(), nil
+}

@@ -137,3 +137,7 @@ func (store *MemoryStore) Push(labels map[string]string, line string, t time.Tim
 
 	return nil
 }
+
+func (store *MemoryStore) GetLabelValues(options logstore.LabelValueOptions) ([]string, error) {
+	return []string{}, nil
+}

@@ -168,6 +168,8 @@ func main() {
 	r.Method("GET", "/incidents/{uid}/events", incidentHandlers.NewListIncidentEventsHandler(repo))
 
 	r.Method("GET", "/logs", logHandlers.NewGetLogHandler(conf))
+	r.Method("GET", "/logs/pod_values", logHandlers.NewGetPodValuesHandler(conf))
+
 	r.Method("GET", "/events", eventHandlers.NewGetEventHandler(conf))
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", envDecoderConf.ServerPort), r); err != nil {
