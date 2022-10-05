@@ -93,9 +93,10 @@ func (e *EventController) processEvent(k8sEvent *v1.Event) error {
 
 	// store the event via the log store
 	if serializedEvent, err := serializeEvent(k8sEvent); err == nil {
-		// TODO: add labels here
 		err = e.LogStore.Push(map[string]string{
 			"event_store": "true",
+			"pod":         k8sEvent.InvolvedObject.Name,
+			"namespace":   k8sEvent.InvolvedObject.Namespace,
 		}, serializedEvent, time.Now())
 
 		if err != nil {

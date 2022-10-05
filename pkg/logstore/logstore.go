@@ -7,16 +7,18 @@ type Writer interface {
 }
 
 type TailOptions struct {
-	Labels map[string]string
-	Start  time.Time
-	Limit  uint32
+	Labels               map[string]string
+	Start                time.Time
+	Limit                uint32
+	CustomSelectorSuffix string
 }
 
 type QueryOptions struct {
-	Labels map[string]string
-	Start  time.Time
-	End    time.Time
-	Limit  uint32
+	Labels               map[string]string
+	Start                time.Time
+	End                  time.Time
+	Limit                uint32
+	CustomSelectorSuffix string
 }
 
 type LogStore interface {

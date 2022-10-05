@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func LabelsMapToString(labels map[string]string, matcher string) string {
+func LabelsMapToString(labels map[string]string, matcher string, additionalQuery string) string {
 	lstrs := make([]string, 0, len(labels))
 
 	for l, v := range labels {
@@ -14,5 +14,10 @@ func LabelsMapToString(labels map[string]string, matcher string) string {
 	}
 
 	sort.Strings(lstrs)
+
+	if additionalQuery != "" {
+		return fmt.Sprintf("{%s, %s}", strings.Join(lstrs, ", "), additionalQuery)
+	}
+
 	return fmt.Sprintf("{%s}", strings.Join(lstrs, ", "))
 }

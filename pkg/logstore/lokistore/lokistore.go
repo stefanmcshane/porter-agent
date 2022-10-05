@@ -54,7 +54,7 @@ func (store *LokiStore) Push(labels map[string]string, line string, t time.Time)
 	}
 
 	streamAdapter := &proto.StreamAdapter{
-		Labels:  logstore.LabelsMapToString(labels, "="),
+		Labels:  logstore.LabelsMapToString(labels, "=", ""),
 		Entries: []*proto.EntryAdapter{entry},
 	}
 
@@ -71,7 +71,7 @@ func (store *LokiStore) Push(labels map[string]string, line string, t time.Time)
 
 func (store *LokiStore) Query(options logstore.QueryOptions, w logstore.Writer, stopCh <-chan struct{}) error {
 	stream, err := store.querierClient.Query(context.Background(), &proto.QueryRequest{
-		Selector:  logstore.LabelsMapToString(options.Labels, "=~"),
+		Selector:  logstore.LabelsMapToString(options.Labels, "=~", options.CustomSelectorSuffix),
 		Start:     timestamppb.New(options.Start),
 		End:       timestamppb.New(options.End),
 		Limit:     options.Limit,
@@ -110,7 +110,7 @@ func (store *LokiStore) Query(options logstore.QueryOptions, w logstore.Writer, 
 
 func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, stopCh <-chan struct{}) error {
 	stream, err := store.querierClient.Tail(context.Background(), &proto.TailRequest{
-		Query: logstore.LabelsMapToString(options.Labels, "=~"),
+		Query: logstore.LabelsMapToString(options.Labels, "=~", options.CustomSelectorSuffix),
 		Start: timestamppb.New(options.Start),
 		Limit: options.Limit,
 	})
