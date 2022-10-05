@@ -89,21 +89,25 @@ func (store *LokiStore) Query(options logstore.QueryOptions, w logstore.Writer, 
 		default:
 			resp, err := stream.Recv()
 
-			for _, s := range resp.GetStreams() {
-				for _, entry := range s.GetEntries() {
-					t := entry.Timestamp.AsTime()
-					w.Write(&t, entry.Line)
-				}
-			}
-
-			if err == io.EOF {
-				return nil
-			}
-
 			if err != nil {
+				if err == io.EOF {
+					return nil
+				}
+
 				return err
 			}
 
+			for _, s := range resp.GetStreams() {
+				for _, entry := range s.GetEntries() {
+					t := entry.Timestamp.AsTime()
+
+					err := w.Write(&t, entry.Line)
+
+					if err != nil {
+						return err
+					}
+				}
+			}
 		}
 	}
 }
@@ -126,21 +130,25 @@ func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, st
 		default:
 			resp, err := stream.Recv()
 
+			if err != nil {
+				if err == io.EOF {
+					return nil
+				}
+
+				return err
+			}
+
 			entries := resp.Stream.GetEntries()
 
 			for _, entry := range entries {
 				t := entry.Timestamp.AsTime()
-				w.Write(&t, entry.Line)
-			}
 
-			if err == io.EOF {
-				return nil
-			}
+				err := w.Write(&t, entry.Line)
 
-			if err != nil {
-				return err
+				if err != nil {
+					return err
+				}
 			}
-
 		}
 	}
 }
