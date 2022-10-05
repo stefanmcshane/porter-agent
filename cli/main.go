@@ -20,7 +20,7 @@ import (
 type logWriter struct{}
 
 func (lw *logWriter) Write(timestamp *time.Time, log string) error {
-	fmt.Printf("%v: %s\n", timestamp, log)
+	fmt.Printf("%s\n", log)
 	return nil
 }
 
