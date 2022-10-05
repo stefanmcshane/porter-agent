@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -40,7 +41,7 @@ func NewClient(conf *HTTPClientConf, logger *logger.Logger) *Client {
 }
 
 func (c *Client) NotifyNew(incident *types.Incident) error {
-	_, err := c.post(fmt.Sprintf("/api/projects/%s/clusters/%s/incidents/notify_new", c.projectID, c.clusterID), incident)
+	err := c.post(fmt.Sprintf("/api/projects/%s/clusters/%s/incidents/notify_new", c.projectID, c.clusterID), incident)
 
 	if err != nil {
 		c.logger.Error().Caller().Msgf("could not notify new for incident %s: %v", incident.ID, err)
@@ -52,7 +53,7 @@ func (c *Client) NotifyNew(incident *types.Incident) error {
 }
 
 func (c *Client) NotifyResolved(incident *types.Incident) error {
-	_, err := c.post(fmt.Sprintf("/api/projects/%s/clusters/%s/incidents/notify_resolved", c.projectID, c.clusterID), incident)
+	err := c.post(fmt.Sprintf("/api/projects/%s/clusters/%s/incidents/notify_resolved", c.projectID, c.clusterID), incident)
 
 	if err != nil {
 		c.logger.Error().Caller().Msgf("could not notify resolved for incident %s: %v", incident.ID, err)
@@ -63,21 +64,35 @@ func (c *Client) NotifyResolved(incident *types.Incident) error {
 	return err
 }
 
-func (c *Client) post(path string, body interface{}) (*http.Response, error) {
+func (c *Client) post(path string, body interface{}) error {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	url := fmt.Sprintf("%s%s", c.host, path)
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.token))
 	req.Header.Set("Content-Type", "application/json")
 
-	return c.client.Do(req)
+	res, err := c.client.Do(req)
+
+	defer res.Body.Close()
+
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusBadRequest {
+		bodyBytes, err := ioutil.ReadAll(res.Body)
+
+		if err == nil {
+			return fmt.Errorf("http client error, status code: %d. response body: %s", res.StatusCode, string(bodyBytes))
+		} else {
+			return fmt.Errorf("unknown error, status code: %d", res.StatusCode)
+		}
+	}
+
+	return nil
 }
