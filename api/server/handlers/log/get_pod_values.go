@@ -35,7 +35,8 @@ func (h *GetPodValuesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if req.StartRange == nil {
-		req.StartRange = &time.Time{}
+		days29 := time.Now().Add(-29 * 24 * time.Hour)
+		req.StartRange = &days29
 	}
 
 	if req.EndRange == nil {
