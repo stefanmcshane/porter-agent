@@ -206,7 +206,12 @@ func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, 
 		for _, candidateMatchEvent := range candidateMatch.Events {
 			if candidateMatchEvent.IsPrimaryCause && candidateMatchEvent.Summary == primaryCauseSummary {
 				// in this case, we've found a match, and we merge and return
-				candidateMatch.LastSeen = incident.LastSeen
+
+				// take the greater of the last seen time
+				if incident.LastSeen.After(*candidateMatch.LastSeen) {
+					candidateMatch.LastSeen = incident.LastSeen
+				}
+
 				mergedEvents := mergeEvents(candidateMatch.Events, incident.Events)
 				candidateMatch.Events = mergedEvents
 
