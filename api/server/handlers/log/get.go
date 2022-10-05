@@ -33,6 +33,15 @@ func (h *GetLogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.StartRange == nil {
+		req.StartRange = &time.Time{}
+	}
+
+	if req.EndRange == nil {
+		now := time.Now()
+		req.EndRange = &now
+	}
+
 	lb := &logBuffer{}
 	stopCh := make(chan struct{})
 
