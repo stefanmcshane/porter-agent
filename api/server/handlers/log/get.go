@@ -47,9 +47,10 @@ func (h *GetLogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	stopCh := make(chan struct{})
 
 	err := h.Config.LogStore.Query(logstore.QueryOptions{
-		Start: *req.StartRange,
-		End:   *req.EndRange,
-		Limit: uint32(req.Limit),
+		Start:       *req.StartRange,
+		End:         *req.EndRange,
+		Limit:       uint32(req.Limit),
+		SearchParam: req.SearchParam,
 		Labels: map[string]string{
 			"pod":       req.PodSelector,
 			"namespace": req.Namespace,

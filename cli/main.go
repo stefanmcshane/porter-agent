@@ -36,10 +36,12 @@ func main() {
 
 	var labels []string
 	var start string
+	var searchParam string
 	var limit uint32
 
 	flag.StringArrayVarP(&labels, "label", "l", []string{}, "labels to use for logstore")
 	flag.StringVar(&start, "start", "", "start time to use for logstore")
+	flag.StringVar(&searchParam, "search", "", "search term to use for logstore")
 	flag.Uint32Var(&limit, "limit", 0, "limit to use for logstore")
 
 	flag.Parse()
@@ -93,6 +95,7 @@ func main() {
 	if err := logStore.Tail(logstore.TailOptions{
 		Labels:               labelsMap,
 		Start:                startTime,
+		SearchParam:          searchParam,
 		Limit:                limit,
 		CustomSelectorSuffix: "event_store!=\"true\"",
 	}, w, stopChan); err != nil {

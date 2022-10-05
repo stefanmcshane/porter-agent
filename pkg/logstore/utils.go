@@ -21,3 +21,11 @@ func LabelsMapToString(labels map[string]string, matcher string, additionalQuery
 
 	return fmt.Sprintf("{%s}", strings.Join(lstrs, ", "))
 }
+
+func ConstructSearch(labelsString, searchParam string) string {
+	if searchParam == "" {
+		return labelsString
+	}
+
+	return fmt.Sprintf("%s |~ \"(?i)%s\"", labelsString, searchParam)
+}

@@ -8,6 +8,7 @@ type Writer interface {
 
 type TailOptions struct {
 	Labels               map[string]string
+	SearchParam          string
 	Start                time.Time
 	Limit                uint32
 	CustomSelectorSuffix string
@@ -15,6 +16,7 @@ type TailOptions struct {
 
 type QueryOptions struct {
 	Labels               map[string]string
+	SearchParam          string
 	Start                time.Time
 	End                  time.Time
 	Limit                uint32
