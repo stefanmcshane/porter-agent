@@ -90,6 +90,8 @@ func main() {
 		stopChan <- struct{}{}
 	}()
 
+	fmt.Println("TAILING WITH", labelsMap, startTime, limit)
+
 	if err := logStore.Tail(logstore.TailOptions{
 		Labels:               labelsMap,
 		Start:                startTime,
