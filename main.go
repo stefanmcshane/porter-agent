@@ -39,6 +39,7 @@ import (
 	eventHandlers "github.com/porter-dev/porter-agent/api/server/handlers/event"
 	incidentHandlers "github.com/porter-dev/porter-agent/api/server/handlers/incident"
 	logHandlers "github.com/porter-dev/porter-agent/api/server/handlers/log"
+	statusHandlers "github.com/porter-dev/porter-agent/api/server/handlers/status"
 )
 
 var (
@@ -166,14 +167,16 @@ func main() {
 
 	r.Mount("/debug", middleware.Profiler())
 
-	r.Method("GET", "/incidents", incidentHandlers.NewListIncidentsHandler(repo))
-	r.Method("GET", "/incidents/{uid}", incidentHandlers.NewGetIncidentHandler(repo))
-	r.Method("GET", "/incidents/{uid}/events", incidentHandlers.NewListIncidentEventsHandler(repo))
+	r.Method("GET", "/incidents", incidentHandlers.NewListIncidentsHandler(conf))
+	r.Method("GET", "/incidents/{uid}", incidentHandlers.NewGetIncidentHandler(conf))
+	r.Method("GET", "/incidents/{uid}/events", incidentHandlers.NewListIncidentEventsHandler(conf))
 
 	r.Method("GET", "/logs", logHandlers.NewGetLogHandler(conf))
 	r.Method("GET", "/logs/pod_values", logHandlers.NewGetPodValuesHandler(conf))
 
 	r.Method("GET", "/events", eventHandlers.NewGetEventHandler(conf))
+
+	r.Method("GET", "/status", statusHandlers.NewGetStatusHandler(conf))
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", envDecoderConf.ServerPort), r); err != nil {
 		l.Error().Caller().Msgf("error starting API server: %v", err)

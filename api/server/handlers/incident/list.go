@@ -1,22 +1,27 @@
 package incident
 
 import (
-	"encoding/json"
-	"log"
 	"net/http"
 
-	"github.com/gorilla/schema"
+	"github.com/porter-dev/porter-agent/api/server/config"
 	"github.com/porter-dev/porter-agent/api/server/types"
-	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/internal/utils"
+	"github.com/porter-dev/porter/api/server/shared"
+	"github.com/porter-dev/porter/api/server/shared/apierrors"
 )
 
 type ListIncidentsHandler struct {
-	repo *repository.Repository
+	decoderValidator shared.RequestDecoderValidator
+	resultWriter     shared.ResultWriter
+	config           *config.Config
 }
 
-func NewListIncidentsHandler(repo *repository.Repository) *ListIncidentsHandler {
-	return &ListIncidentsHandler{repo}
+func NewListIncidentsHandler(config *config.Config) *ListIncidentsHandler {
+	return &ListIncidentsHandler{
+		resultWriter:     shared.NewDefaultResultWriter(config.Logger, config.Alerter),
+		decoderValidator: shared.NewDefaultRequestDecoderValidator(config.Logger, config.Alerter),
+		config:           config,
+	}
 }
 
 func (h ListIncidentsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -24,15 +29,11 @@ func (h ListIncidentsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		PaginationRequest: &types.PaginationRequest{},
 	}
 
-	err := schema.NewDecoder().Decode(req, r.URL.Query())
-
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		log.Printf("API error in ListIncidentsHandler: %v", err)
+	if ok := h.decoderValidator.DecodeAndValidate(w, r, req); !ok {
 		return
 	}
 
-	incidents, paginatedResult, err := h.repo.Incident.ListIncidents(
+	incidents, paginatedResult, err := h.config.Repository.Incident.ListIncidents(
 		&utils.ListIncidentsFilter{
 			Status:           req.Status,
 			ReleaseName:      req.ReleaseName,
@@ -45,8 +46,7 @@ func (h ListIncidentsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	)
 
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("API error in ListIncidentsHandler: %v", err)
+		apierrors.HandleAPIError(h.config.Logger, h.config.Alerter, w, r, apierrors.NewErrInternal(err), true)
 		return
 	}
 
@@ -62,13 +62,5 @@ func (h ListIncidentsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		res.Incidents = append(res.Incidents, incident.ToAPITypeMeta())
 	}
 
-	jsonResponse, err := json.Marshal(res)
-
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("API error in ListIncidentsHandler: %v", err)
-		return
-	}
-
-	w.Write(jsonResponse)
+	h.resultWriter.WriteResult(w, r, res)
 }
