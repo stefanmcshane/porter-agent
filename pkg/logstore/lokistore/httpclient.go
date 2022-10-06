@@ -101,5 +101,13 @@ func (c *Client) get(path string, params map[string][]string) ([]byte, error) {
 
 	defer res.Body.Close()
 
-	return ioutil.ReadAll(res.Body)
+	resBytes, err := ioutil.ReadAll(res.Body)
+
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println("loki response bytes are:", string(resBytes))
+
+	return resBytes, nil
 }
