@@ -63,6 +63,12 @@ func main() {
 		logStoreKind = "memory"
 		logStore, err = memorystore.New("test", memorystore.Options{})
 	} else {
+		lokistore.SetupLokiStatus(envDecoderConf.LogStoreConf.LogStoreAddress)
+
+		if lokistore.GetLokiStatus() == lokistore.UnreachableStatus {
+			l.Fatal().Caller().Msg("loki is unreachable")
+		}
+
 		logStoreKind = "loki"
 		logStore, err = lokistore.New("test", lokistore.LogStoreConfig{Address: envDecoderConf.LogStoreConf.LogStoreAddress})
 	}
@@ -90,11 +96,38 @@ func main() {
 	go func() {
 		<-sig
 		stopChan <- struct{}{}
+		os.Exit(0)
 	}()
+
+	if envDecoderConf.LogStoreConf.LogStoreKind != "memory" {
+		go func() {
+			for {
+				if lokistore.GetLokiStatus() == lokistore.UnreachableStatus {
+					stopChan <- struct{}{}
+					l.Fatal().Caller().Msg("loki is unreachable")
+				}
+
+				time.Sleep(5 * time.Second)
+			}
+		}()
+	}
+
+	endTime := startTime.Add(time.Hour)
+
+	if err := logStore.Query(logstore.QueryOptions{
+		Labels:               labelsMap,
+		Start:                startTime,
+		End:                  endTime,
+		SearchParam:          searchParam,
+		Limit:                limit,
+		CustomSelectorSuffix: "event_store!=\"true\"",
+	}, w, stopChan); err != nil {
+		l.Fatal().Caller().Msgf("could not query log store: %v", err)
+	}
 
 	if err := logStore.Tail(logstore.TailOptions{
 		Labels:               labelsMap,
-		Start:                startTime,
+		Start:                endTime.Add(time.Second),
 		SearchParam:          searchParam,
 		Limit:                limit,
 		CustomSelectorSuffix: "event_store!=\"true\"",
