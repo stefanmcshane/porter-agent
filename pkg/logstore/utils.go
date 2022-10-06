@@ -27,5 +27,5 @@ func ConstructSearch(labelsString, searchParam string) string {
 		return labelsString
 	}
 
-	return fmt.Sprintf("%s |~ \"(?i)%s\"", labelsString, searchParam)
+	return fmt.Sprintf(`%s |~ "(?i)%s"`, labelsString, searchParam)
 }
