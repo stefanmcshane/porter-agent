@@ -61,12 +61,15 @@ func (c *Client) QueryRange(options logstore.QueryOptions) (*QueryRangeStreamRes
 	}
 
 	params["start"] = []string{
-		fmt.Sprintf("%d", options.Start.Nanosecond()),
+		fmt.Sprintf("%v", options.Start),
 	}
 
 	params["end"] = []string{
-		fmt.Sprintf("%d", options.End.Nanosecond()),
+		fmt.Sprintf("%v", options.End),
 	}
+
+	fmt.Println("start is:", options.Start)
+	fmt.Println("end is:", options.End)
 
 	resBytes, err := c.get("/loki/api/v1/query_range", params)
 
