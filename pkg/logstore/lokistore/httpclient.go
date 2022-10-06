@@ -68,9 +68,6 @@ func (c *Client) QueryRange(options logstore.QueryOptions) (*QueryRangeStreamRes
 		fmt.Sprintf("%v", options.End.UnixNano()),
 	}
 
-	fmt.Println("start is:", options.Start.UnixNano())
-	fmt.Println("end is:", options.End.UnixNano())
-
 	resBytes, err := c.get("/loki/api/v1/query_range", params)
 
 	if err != nil {
@@ -109,8 +106,6 @@ func (c *Client) get(path string, params map[string][]string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Println("loki response bytes are:", string(resBytes))
 
 	return resBytes, nil
 }
