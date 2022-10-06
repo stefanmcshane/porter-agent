@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	"github.com/porter-dev/porter-agent/pkg/logstore"
@@ -16,13 +17,15 @@ import (
 type LokiStore struct {
 	name          string
 	address       string
+	client        *Client
 	pusherClient  proto.PusherClient
 	querierClient proto.QuerierClient
 	closer        io.Closer
 }
 
 type LogStoreConfig struct {
-	Address string
+	Address     string
+	HTTPAddress string
 }
 
 func New(name string, config LogStoreConfig) (*LokiStore, error) {
@@ -31,6 +34,10 @@ func New(name string, config LogStoreConfig) (*LokiStore, error) {
 	if address == "" {
 		address = ":3100"
 	}
+
+	client := NewClient(&LokiHTTPClientConf{
+		Address: config.HTTPAddress,
+	})
 
 	conn, err := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
@@ -44,6 +51,7 @@ func New(name string, config LogStoreConfig) (*LokiStore, error) {
 		pusherClient:  proto.NewPusherClient(conn),
 		querierClient: proto.NewQuerierClient(conn),
 		closer:        conn,
+		client:        client,
 	}, nil
 }
 
@@ -70,46 +78,76 @@ func (store *LokiStore) Push(labels map[string]string, line string, t time.Time)
 }
 
 func (store *LokiStore) Query(options logstore.QueryOptions, w logstore.Writer, stopCh <-chan struct{}) error {
-	stream, err := store.querierClient.Query(context.Background(), &proto.QueryRequest{
-		Selector:  logstore.ConstructSearch(logstore.LabelsMapToString(options.Labels, "=~", options.CustomSelectorSuffix), options.SearchParam),
-		Start:     timestamppb.New(options.Start),
-		End:       timestamppb.New(options.End),
-		Limit:     options.Limit,
-		Direction: proto.Direction_BACKWARD,
-	})
+	// stream, err := store.querierClient.Query(context.Background(), &proto.QueryRequest{
+	// 	Selector:  logstore.ConstructSearch(logstore.LabelsMapToString(options.Labels, "=~", options.CustomSelectorSuffix), options.SearchParam),
+	// 	Start:     timestamppb.New(options.Start),
+	// 	End:       timestamppb.New(options.End),
+	// 	Limit:     options.Limit,
+	// 	Direction: proto.Direction_BACKWARD,
+	// })
+
+	// if err != nil {
+	// 	return fmt.Errorf("error querying logs from loki store with name %s. Error: %w", store.name, err)
+	// }
+
+	qrResp, err := store.client.QueryRange(options)
 
 	if err != nil {
-		return fmt.Errorf("error querying logs from loki store with name %s. Error: %w", store.name, err)
+		return err
 	}
 
-	for {
-		select {
-		case <-stopCh:
-			return nil
-		default:
-			resp, err := stream.Recv()
-
-			if err != nil {
-				if err == io.EOF {
-					return nil
-				}
-
-				return err
+	for _, stream := range qrResp.Data.Result {
+		for _, rawEntry := range stream.Values {
+			if len(rawEntry) != 2 {
+				continue
 			}
 
-			for _, s := range resp.GetStreams() {
-				for _, entry := range s.GetEntries() {
-					t := entry.Timestamp.AsTime()
+			nano, err := strconv.ParseInt(rawEntry[0], 10, 64)
 
-					err := w.Write(&t, entry.Line)
+			if err != nil {
+				continue
+			}
 
-					if err != nil {
-						return err
-					}
-				}
+			t := time.Unix(0, nano)
+
+			err = w.Write(&t, rawEntry[1])
+
+			if err != nil {
+				return err
 			}
 		}
 	}
+
+	// for {
+	// 	select {
+	// 	case <-stopCh:
+	// 		return nil
+	// 	default:
+	// 		resp, err := stream.Recv()
+
+	// 		if err != nil {
+	// 			if err == io.EOF {
+	// 				return nil
+	// 			}
+
+	// 			return err
+	// 		}
+
+	// 		for _, s := range resp.GetStreams() {
+	// 			for _, entry := range s.GetEntries() {
+	// 				t := entry.Timestamp.AsTime()
+
+	// 				err := w.Write(&t, entry.Line)
+
+	// 				if err != nil {
+	// 					return err
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	return nil
 }
 
 func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, stopCh <-chan struct{}) error {

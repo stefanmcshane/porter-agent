@@ -6,8 +6,9 @@ import (
 )
 
 type LogStoreConf struct {
-	LogStoreAddress string `env:"LOG_STORE_ADDRESS,default=:9096"`
-	LogStoreKind    string `env:"LOG_STORE_KIND,default=memory"`
+	LogStoreAddress     string `env:"LOG_STORE_ADDRESS,default=:9096"`
+	LogStoreHTTPAddress string `env:"LOG_STORE_HTTP_ADDRESS"`
+	LogStoreKind        string `env:"LOG_STORE_KIND,default=memory"`
 }
 type EnvDecoderConf struct {
 	Debug      bool   `env:"DEBUG,default=true"`

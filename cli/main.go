@@ -64,7 +64,10 @@ func main() {
 		logStore, err = memorystore.New("test", memorystore.Options{})
 	} else {
 		logStoreKind = "loki"
-		logStore, err = lokistore.New("test", lokistore.LogStoreConfig{Address: envDecoderConf.LogStoreConf.LogStoreAddress})
+		logStore, err = lokistore.New("test", lokistore.LogStoreConfig{
+			Address:     envDecoderConf.LogStoreConf.LogStoreAddress,
+			HTTPAddress: envDecoderConf.LogStoreConf.LogStoreHTTPAddress,
+		})
 	}
 
 	if err != nil {

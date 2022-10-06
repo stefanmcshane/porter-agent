@@ -79,7 +79,10 @@ func main() {
 	} else {
 		logStoreKind = "loki"
 		lokistore.SetupLokiStatus(envDecoderConf.LogStoreConf.LogStoreAddress)
-		logStore, err = lokistore.New("test", lokistore.LogStoreConfig{Address: envDecoderConf.LogStoreConf.LogStoreAddress})
+		logStore, err = lokistore.New("test", lokistore.LogStoreConfig{
+			Address:     envDecoderConf.LogStoreConf.LogStoreAddress,
+			HTTPAddress: envDecoderConf.LogStoreConf.LogStoreHTTPAddress,
+		})
 	}
 
 	if err != nil {
