@@ -82,6 +82,10 @@ func (c *Client) post(path string, body interface{}) error {
 
 	res, err := c.client.Do(req)
 
+	if err != nil {
+		return err
+	}
+
 	defer res.Body.Close()
 
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusBadRequest {

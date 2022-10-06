@@ -93,11 +93,25 @@ func main() {
 	go func() {
 		<-sig
 		stopChan <- struct{}{}
+		os.Exit(0)
 	}()
+
+	endTime := startTime.Add(time.Hour)
+
+	if err := logStore.Query(logstore.QueryOptions{
+		Labels:               labelsMap,
+		Start:                startTime,
+		End:                  endTime,
+		SearchParam:          searchParam,
+		Limit:                limit,
+		CustomSelectorSuffix: "event_store!=\"true\"",
+	}, w, stopChan); err != nil {
+		l.Fatal().Caller().Msgf("could not query log store: %v", err)
+	}
 
 	if err := logStore.Tail(logstore.TailOptions{
 		Labels:               labelsMap,
-		Start:                startTime,
+		Start:                endTime.Add(time.Second),
 		SearchParam:          searchParam,
 		Limit:                limit,
 		CustomSelectorSuffix: "event_store!=\"true\"",
