@@ -14,7 +14,7 @@ require (
 	gorm.io/gorm v1.23.10
 	k8s.io/api v0.25.0
 	k8s.io/apimachinery v0.25.0
-	k8s.io/client-go v12.0.0+incompatible
+	k8s.io/client-go v0.25.0
 	sigs.k8s.io/controller-runtime v0.13.0
 )
 
@@ -145,6 +145,7 @@ require (
 	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
 	github.com/sony/gobreaker v0.4.1 // indirect
+	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/cobra v1.5.0 // indirect
 	github.com/stretchr/objx v0.4.0 // indirect
@@ -153,6 +154,8 @@ require (
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/weaveworks/common v0.0.0-20220916164235-da3fde973eec // indirect
 	github.com/weaveworks/promrus v1.2.0 // indirect
+	github.com/willf/bitset v1.1.11 // indirect
+	github.com/willf/bloom v2.0.3+incompatible // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
