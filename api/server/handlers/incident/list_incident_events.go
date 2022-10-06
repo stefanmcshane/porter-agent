@@ -1,34 +1,38 @@
 package incident
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 
-	"github.com/go-chi/chi"
-	"github.com/gorilla/schema"
+	"github.com/porter-dev/porter-agent/api/server/config"
 	"github.com/porter-dev/porter-agent/api/server/types"
-	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/internal/utils"
+	"github.com/porter-dev/porter/api/server/shared"
+	"github.com/porter-dev/porter/api/server/shared/apierrors"
+	"github.com/porter-dev/porter/api/server/shared/requestutils"
 	"gorm.io/gorm"
 )
 
 type ListIncidentEventsHandler struct {
-	repo *repository.Repository
+	decoderValidator shared.RequestDecoderValidator
+	resultWriter     shared.ResultWriter
+	config           *config.Config
 }
 
-func NewListIncidentEventsHandler(repo *repository.Repository) *ListIncidentEventsHandler {
-	return &ListIncidentEventsHandler{repo}
+func NewListIncidentEventsHandler(config *config.Config) *ListIncidentEventsHandler {
+	return &ListIncidentEventsHandler{
+		resultWriter:     shared.NewDefaultResultWriter(config.Logger, config.Alerter),
+		decoderValidator: shared.NewDefaultRequestDecoderValidator(config.Logger, config.Alerter),
+		config:           config,
+	}
 }
 
-func (h ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	incidentUID := chi.URLParam(r, "uid")
+func (h *ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	incidentUID, reqErr := requestutils.GetURLParamString(r, "incident_id")
 
-	if incidentUID == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		log.Printf("API error in ListIncidentEventsHandler: %v", fmt.Errorf("empty incident id"))
+	if reqErr != nil {
+		apierrors.HandleAPIError(h.config.Logger, h.config.Alerter, w, r, reqErr, true)
 		return
 	}
 
@@ -36,29 +40,24 @@ func (h ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		PaginationRequest: &types.PaginationRequest{},
 	}
 
-	err := schema.NewDecoder().Decode(req, r.URL.Query())
-
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		log.Printf("API error in ListIncidentEventsHandler: %v", err)
+	if ok := h.decoderValidator.DecodeAndValidate(w, r, req); !ok {
 		return
 	}
 
-	incident, err := h.repo.Incident.ReadIncident(incidentUID)
+	incident, err := h.config.Repository.Incident.ReadIncident(incidentUID)
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			w.WriteHeader(http.StatusNotFound)
-			log.Printf("API error in ListIncidentEventsHandler: %v", err)
+			apierrors.HandleAPIError(h.config.Logger, h.config.Alerter, w, r,
+				apierrors.NewErrNotFound(fmt.Errorf("no such incident exists")), true)
 			return
 		}
 
-		w.WriteHeader(http.StatusBadRequest)
-		log.Printf("API error in ListIncidentEventsHandler: %v", err)
+		apierrors.HandleAPIError(h.config.Logger, h.config.Alerter, w, r, apierrors.NewErrInternal(err), true)
 		return
 	}
 
-	events, paginatedResult, err := h.repo.IncidentEvent.ListEvents(
+	events, paginatedResult, err := h.config.Repository.IncidentEvent.ListEvents(
 		&utils.ListIncidentEventsFilter{
 			IncidentID:   &incident.ID,
 			PodName:      req.PodName,
@@ -72,8 +71,7 @@ func (h ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	)
 
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("API error in ListIncidentEventsHandler: %v", err)
+		apierrors.HandleAPIError(h.config.Logger, h.config.Alerter, w, r, apierrors.NewErrInternal(err), true)
 		return
 	}
 
@@ -89,13 +87,5 @@ func (h ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		res.Events = append(res.Events, ev.ToAPIType())
 	}
 
-	jsonResponse, err := json.Marshal(res)
-
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("API error in ListIncidentEventsHandler: %v", err)
-		return
-	}
-
-	w.Write(jsonResponse)
+	h.resultWriter.WriteResult(w, r, res)
 }
