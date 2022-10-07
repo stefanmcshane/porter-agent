@@ -3,6 +3,7 @@ package incident
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/porter-dev/porter-agent/pkg/event"
 	"k8s.io/client-go/kubernetes"
@@ -27,6 +28,7 @@ const (
 	NonZeroExitCode           EventMatchSummary = "The application exited with a non-zero exit code"
 	OutOfMemory               EventMatchSummary = "The application ran out of memory"
 	InvalidImage              EventMatchSummary = "The application has an invalid image"
+	InvalidStartCommand       EventMatchSummary = "The application has an invalid start command"
 	GenericApplicationRestart EventMatchSummary = "The application was restarted due to an error"
 )
 
@@ -122,6 +124,17 @@ func init() {
 		IsPrimaryCause: true,
 	})
 
+	eventMatch1_20 = append(eventMatch1_20, EventMatch{
+		SourceMatch: event.Pod,
+		Summary:     InvalidStartCommand,
+		DetailGenerator: func(e *event.FilteredEvent) string {
+			return fmt.Sprintf("The start command %s was not found in $PATH", strings.Join(e.Pod.Spec.Containers[0].Command, " "))
+		},
+		ReasonMatch:    "ContainerCannotRun",
+		MessageMatch:   regexp.MustCompile(".*executable file not found in.*"),
+		IsPrimaryCause: true,
+	})
+
 	EventEnum[KubernetesVersion_1_20] = eventMatch1_20
 
 	PrimaryCauseCandidates = make(map[EventMatchSummary][]EventMatchSummary)
@@ -133,6 +146,10 @@ func init() {
 }
 
 func GetEventMatchFromEvent(k8sVersion KubernetesVersion, k8sClient *kubernetes.Clientset, filteredEvent *event.FilteredEvent) *EventMatch {
+	if filteredEvent == nil {
+		return nil
+	}
+
 	for _, candidate := range EventEnum[k8sVersion] {
 		if candidate.SourceMatch != filteredEvent.Source {
 			continue

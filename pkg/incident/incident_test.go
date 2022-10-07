@@ -107,6 +107,18 @@ func TestPodImagePullBackOffAndAppError1_20(t *testing.T) {
 	assert.Equal(t, 2, numProcessed, "both application error and image pull backoff error should be matched")
 }
 
+// Ensure that pods with an invalid start command are properly cased against
+func TestPodInvalidStartCommand1_20(t *testing.T) {
+	events := loadPodFixtures(t, "invalid-start-command.json")
+
+	matches := get1_20Matches(t, events)
+
+	// assert that one event has matched
+	assert.Equal(t, 1, len(matches), "one match should exist")
+
+	assert.Equal(t, incident.InvalidStartCommand, matches[0].Summary, "match should be invalid start command")
+}
+
 func get1_20Matches(t *testing.T, events []*event.FilteredEvent) []*incident.EventMatch {
 	matches := make([]*incident.EventMatch, 0)
 

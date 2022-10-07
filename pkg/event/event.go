@@ -246,11 +246,12 @@ func NewFilteredEventsFromPod(pod *v1.Pod) []*FilteredEvent {
 			// if the waiting state is an image error, we store this as an event as well
 			if waitingState.Reason == "ImagePullBackOff" || waitingState.Reason == "ErrImagePull" || waitingState.Reason == "InvalidImageName" {
 				res = append(res, &FilteredEvent{
-					Source:           Pod,
-					PodName:          pod.Name,
-					PodNamespace:     pod.Namespace,
-					KubernetesReason: waitingState.Reason,
-					Severity:         EventSeverityHigh,
+					Source:            Pod,
+					PodName:           pod.Name,
+					PodNamespace:      pod.Namespace,
+					KubernetesReason:  waitingState.Reason,
+					KubernetesMessage: waitingState.Message,
+					Severity:          EventSeverityHigh,
 					// We set this to the creation timestamp of the pod - note that this will miss cases where the image has been
 					// deleted from the registry and the pod was restarted afterwards.
 					Timestamp: &pod.CreationTimestamp.Time,
@@ -270,6 +271,10 @@ func NewFilteredEventsFromPod(pod *v1.Pod) []*FilteredEvent {
 }
 
 func getEventFromTerminationState(podName, podNamespace string, termState *v1.ContainerStateTerminated) *FilteredEvent {
+	if termState.Reason == "Completed" {
+		return nil
+	}
+
 	event := &FilteredEvent{
 		Source:       Pod,
 		PodName:      podName,
@@ -282,10 +287,12 @@ func getEventFromTerminationState(podName, podNamespace string, termState *v1.Co
 	if termState.Reason == "" {
 		if termState.ExitCode != 0 {
 			event.KubernetesReason = "ApplicationError"
+			event.KubernetesMessage = termState.Message
 			return event
 		}
 	} else {
 		event.KubernetesReason = termState.Reason
+		event.KubernetesMessage = termState.Message
 		return event
 	}
 
