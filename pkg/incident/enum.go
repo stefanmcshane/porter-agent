@@ -81,6 +81,17 @@ func init() {
 	})
 
 	eventMatch1_20 = append(eventMatch1_20, EventMatch{
+		SourceMatch: event.K8sEvent,
+		Summary:     InvalidImage,
+		DetailGenerator: func(e *event.FilteredEvent) string {
+			return fmt.Sprintf("Your application cannot pull from the image registry. Details: %s", e.KubernetesMessage)
+		},
+		ReasonMatch:    "Failed",
+		MessageMatch:   regexp.MustCompile("Failed to pull image.*"),
+		IsPrimaryCause: true,
+	})
+
+	eventMatch1_20 = append(eventMatch1_20, EventMatch{
 		SourceMatch: event.Pod,
 		Summary:     NonZeroExitCode,
 		DetailGenerator: func(e *event.FilteredEvent) string {
@@ -126,12 +137,46 @@ func init() {
 
 	eventMatch1_20 = append(eventMatch1_20, EventMatch{
 		SourceMatch: event.Pod,
+		Summary:     InvalidImage,
+		DetailGenerator: func(e *event.FilteredEvent) string {
+			return fmt.Sprintf("Your application cannot pull from the image registry.")
+		},
+		ReasonMatch:    "ErrImagePull",
+		MessageMatch:   regexp.MustCompile(".*"),
+		IsPrimaryCause: true,
+	})
+
+	eventMatch1_20 = append(eventMatch1_20, EventMatch{
+		SourceMatch: event.Pod,
+		Summary:     InvalidImage,
+		DetailGenerator: func(e *event.FilteredEvent) string {
+			return fmt.Sprintf("Your image name is not valid.")
+		},
+		ReasonMatch:    "InvalidImageName",
+		MessageMatch:   regexp.MustCompile(".*"),
+		IsPrimaryCause: true,
+	})
+
+	eventMatch1_20 = append(eventMatch1_20, EventMatch{
+		SourceMatch: event.Pod,
 		Summary:     InvalidStartCommand,
 		DetailGenerator: func(e *event.FilteredEvent) string {
 			return fmt.Sprintf("The start command %s was not found in $PATH", strings.Join(e.Pod.Spec.Containers[0].Command, " "))
 		},
 		ReasonMatch:    "ContainerCannotRun",
 		MessageMatch:   regexp.MustCompile(".*executable file not found in.*"),
+		IsPrimaryCause: true,
+	})
+
+	eventMatch1_20 = append(eventMatch1_20, EventMatch{
+		SourceMatch: event.Pod,
+		Summary:     StuckPending,
+		DetailGenerator: func(e *event.FilteredEvent) string {
+			// in this case, we have constructed the kubernetes message
+			return e.KubernetesMessage
+		},
+		ReasonMatch:    "Pending",
+		MessageMatch:   regexp.MustCompile("Pod has been pending for.*"),
 		IsPrimaryCause: true,
 	})
 
