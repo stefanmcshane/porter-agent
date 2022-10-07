@@ -136,6 +136,8 @@ func (e *FilteredEvent) PopulateEventOwner(k8sClient kubernetes.Clientset) error
 			Name:      o.Name,
 			Kind:      o.Kind,
 		}
+
+		return nil
 	}
 
 	return fmt.Errorf("unsupported owner reference kind")

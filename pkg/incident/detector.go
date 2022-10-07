@@ -64,7 +64,8 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 	err := alertedEvents[0].Populate(*d.KubeClient)
 
 	if err != nil {
-		return nil
+		d.Logger.Error().Caller().Msgf("could not populate alerted event: %v", err)
+		return err
 	}
 
 	// populate all other alerted events with the same data
