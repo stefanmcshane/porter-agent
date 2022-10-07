@@ -98,6 +98,9 @@ func main() {
 		Client:     client,
 		Repository: repo,
 		Logger:     l,
+		AlertConfiguration: &alerter.AlertConfiguration{
+			DefaultJobAlertConfiguration: alerter.JobAlertConfigurationEvery,
+		},
 	}
 
 	detector := &incident.IncidentDetector{
