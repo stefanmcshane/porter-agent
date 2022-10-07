@@ -51,6 +51,7 @@ func (h *GetLogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		End:         *req.EndRange,
 		Limit:       uint32(req.Limit),
 		SearchParam: req.SearchParam,
+		Direction:   req.Direction,
 		Labels: map[string]string{
 			"pod":       req.PodSelector,
 			"namespace": req.Namespace,

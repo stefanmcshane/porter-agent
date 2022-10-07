@@ -21,6 +21,7 @@ type QueryOptions struct {
 	End                  time.Time
 	Limit                uint32
 	CustomSelectorSuffix string
+	Direction            string
 }
 
 type LabelValueOptions struct {

@@ -68,6 +68,12 @@ func (c *Client) QueryRange(options logstore.QueryOptions) (*QueryRangeStreamRes
 		fmt.Sprintf("%v", options.End.UnixNano()),
 	}
 
+	if options.Direction != "" {
+		params["direction"] = []string{
+			options.Direction,
+		}
+	}
+
 	resBytes, err := c.get("/loki/api/v1/query_range", params)
 
 	if err != nil {
