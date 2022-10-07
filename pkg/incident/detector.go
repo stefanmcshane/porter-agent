@@ -48,7 +48,7 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 
 	for _, e := range es {
 		// if the event severity is low, do not alert
-		if e.Severity == event.EventSeverityLow {
+		if e == nil || e.Severity == event.EventSeverityLow {
 			continue
 		}
 

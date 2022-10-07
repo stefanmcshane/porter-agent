@@ -260,10 +260,14 @@ func NewFilteredEventsFromPod(pod *v1.Pod) []*FilteredEvent {
 
 			if lastTermState := containerStatus.LastTerminationState.Terminated; lastTermState != nil {
 				// add the last termination state as an event if it was last terminated within 12 hours
-				res = append(res, getEventFromTerminationState(pod.Name, pod.Namespace, lastTermState))
+				if e := getEventFromTerminationState(pod.Name, pod.Namespace, lastTermState); e != nil {
+					res = append(res, e)
+				}
 			}
 		} else if termState := containerStatus.State.Terminated; termState != nil {
-			res = append(res, getEventFromTerminationState(pod.Name, pod.Namespace, termState))
+			if e := getEventFromTerminationState(pod.Name, pod.Namespace, termState); e != nil {
+				res = append(res, e)
+			}
 		}
 	}
 
