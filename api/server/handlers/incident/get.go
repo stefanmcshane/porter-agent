@@ -25,7 +25,7 @@ func NewGetIncidentHandler(config *config.Config) *GetIncidentHandler {
 }
 
 func (h *GetIncidentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	incidentUID, reqErr := requestutils.GetURLParamString(r, "incident_id")
+	incidentUID, reqErr := requestutils.GetURLParamString(r, "uid")
 
 	if reqErr != nil {
 		apierrors.HandleAPIError(h.config.Logger, h.config.Alerter, w, r, reqErr, true)
