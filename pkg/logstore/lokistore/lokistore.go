@@ -56,6 +56,10 @@ func New(name string, config LogStoreConfig) (*LokiStore, error) {
 }
 
 func (store *LokiStore) Push(labels map[string]string, line string, t time.Time) error {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	defer cancel()
+
 	entry := &proto.EntryAdapter{
 		Timestamp: timestamppb.New(t),
 		Line:      line,
@@ -66,7 +70,7 @@ func (store *LokiStore) Push(labels map[string]string, line string, t time.Time)
 		Entries: []*proto.EntryAdapter{entry},
 	}
 
-	_, err := store.pusherClient.Push(context.Background(), &proto.PushRequest{
+	_, err := store.pusherClient.Push(ctx, &proto.PushRequest{
 		Streams: []*proto.StreamAdapter{streamAdapter},
 	})
 
@@ -78,18 +82,6 @@ func (store *LokiStore) Push(labels map[string]string, line string, t time.Time)
 }
 
 func (store *LokiStore) Query(options logstore.QueryOptions, w logstore.Writer, stopCh <-chan struct{}) error {
-	// stream, err := store.querierClient.Query(context.Background(), &proto.QueryRequest{
-	// 	Selector:  logstore.ConstructSearch(logstore.LabelsMapToString(options.Labels, "=~", options.CustomSelectorSuffix), options.SearchParam),
-	// 	Start:     timestamppb.New(options.Start),
-	// 	End:       timestamppb.New(options.End),
-	// 	Limit:     options.Limit,
-	// 	Direction: proto.Direction_BACKWARD,
-	// })
-
-	// if err != nil {
-	// 	return fmt.Errorf("error querying logs from loki store with name %s. Error: %w", store.name, err)
-	// }
-
 	qrResp, err := store.client.QueryRange(options)
 
 	if err != nil {
@@ -118,40 +110,15 @@ func (store *LokiStore) Query(options logstore.QueryOptions, w logstore.Writer, 
 		}
 	}
 
-	// for {
-	// 	select {
-	// 	case <-stopCh:
-	// 		return nil
-	// 	default:
-	// 		resp, err := stream.Recv()
-
-	// 		if err != nil {
-	// 			if err == io.EOF {
-	// 				return nil
-	// 			}
-
-	// 			return err
-	// 		}
-
-	// 		for _, s := range resp.GetStreams() {
-	// 			for _, entry := range s.GetEntries() {
-	// 				t := entry.Timestamp.AsTime()
-
-	// 				err := w.Write(&t, entry.Line)
-
-	// 				if err != nil {
-	// 					return err
-	// 				}
-	// 			}
-	// 		}
-	// 	}
-	// }
-
 	return nil
 }
 
 func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, stopCh <-chan struct{}) error {
-	stream, err := store.querierClient.Tail(context.Background(), &proto.TailRequest{
+	ctx, cancel := context.WithCancel(context.Background())
+
+	defer cancel()
+
+	stream, err := store.querierClient.Tail(ctx, &proto.TailRequest{
 		Query: logstore.ConstructSearch(logstore.LabelsMapToString(options.Labels, "=~", options.CustomSelectorSuffix), options.SearchParam),
 		Start: timestamppb.New(options.Start),
 		Limit: options.Limit,
@@ -192,7 +159,11 @@ func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, st
 }
 
 func (store *LokiStore) GetLabelValues(options logstore.LabelValueOptions) ([]string, error) {
-	labelValues, err := store.querierClient.Label(context.Background(), &proto.LabelRequest{
+	ctx, cancel := context.WithCancel(context.Background())
+
+	defer cancel()
+
+	labelValues, err := store.querierClient.Label(ctx, &proto.LabelRequest{
 		Name:   options.Label,
 		Values: true,
 		Start:  timestamppb.New(options.Start),

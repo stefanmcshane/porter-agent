@@ -60,9 +60,20 @@ func init() {
 		SourceMatch: event.K8sEvent,
 		Summary:     FailingHealthCheck,
 		DetailGenerator: func(e *event.FilteredEvent) string {
-			return "Your application was restarted because it failing its liveness health check. You can configure the liveness health check from the Advanced tab of your application settings."
+			return "Your application was restarted because it failing its startup health check. You can configure the startup health check from the Advanced tab of your application settings."
 		},
 		ReasonMatch: "Killing",
+		MessageMatch: regexp.MustCompile(
+			fmt.Sprintf(`Container %s failed startup probe, will be restarted`, RFC1123Name),
+		),
+		IsPrimaryCause: true,
+	})
+
+	eventMatch1_20 = append(eventMatch1_20, EventMatch{
+		SourceMatch:     event.K8sEvent,
+		Summary:         FailingHealthCheck,
+		DetailGenerator: generateFailingLivenessMessage,
+		ReasonMatch:     "Killing",
 		MessageMatch: regexp.MustCompile(
 			fmt.Sprintf(`Container %s failed liveness probe, will be restarted`, RFC1123Name),
 		),
@@ -216,4 +227,43 @@ func GetEventMatchFromEvent(k8sVersion KubernetesVersion, k8sClient *kubernetes.
 	}
 
 	return nil
+}
+
+func generateFailingStartupMessage(e *event.FilteredEvent) string {
+	// we show the user what their health check was set to, which should indicate why the health check failed
+	sentences := make([]string, 0)
+
+	sentences = append(sentences, "Your application was restarted because it failed its startup health check.")
+
+	if e.Pod != nil {
+		startup := e.Pod.Spec.Containers[0].StartupProbe
+
+		if startup != nil && startup.HTTPGet != nil {
+			sentences = append(sentences, fmt.Sprintf("Your startup health check is set to the path %s. Please make sure that your application responds with a 200-level response code on this endpoint", startup.HTTPGet.Path))
+		}
+	}
+
+	sentences = append(sentences, "If the health check is configured correctly, there are several other reasons why the startup health check may be failing. Consult the documentation here: https://docs.porter.run/deploying-applications/zero-downtime-deployments/#health-checks.")
+
+	return strings.Join(sentences, " ")
+}
+
+func generateFailingLivenessMessage(e *event.FilteredEvent) string {
+	// we show the user what their health check was set to, which should indicate why the health check failed
+	sentences := make([]string, 0)
+
+	sentences = append(sentences, "Your application was restarted because it failed its health check.")
+
+	if e.Pod != nil {
+		liveness := e.Pod.Spec.Containers[0].LivenessProbe
+
+		if liveness != nil && liveness.HTTPGet != nil {
+			sentences = append(sentences, fmt.Sprintf("Your liveness health check is set to the path %s. Please make sure that your application responds with a 200-level response code on this endpoint", liveness.HTTPGet.Path))
+
+		}
+	}
+
+	sentences = append(sentences, "If the health check is configured correctly, there are several other reasons why the startup health check may be failing. Consult the documentation here: https://docs.porter.run/deploying-applications/zero-downtime-deployments/#health-checks.")
+
+	return strings.Join(sentences, " ")
 }
