@@ -15,11 +15,10 @@ import (
 )
 
 type LokiStore struct {
-	name          string
-	address       string
-	client        *Client
-	pusherClient  proto.PusherClient
-	querierClient proto.QuerierClient
+	name    string
+	address string
+	client  *Client
+	conn    *grpc.ClientConn
 }
 
 type LogStoreConfig struct {
@@ -45,11 +44,10 @@ func New(name string, config LogStoreConfig) (*LokiStore, error) {
 	}
 
 	return &LokiStore{
-		address:       address,
-		name:          name,
-		pusherClient:  proto.NewPusherClient(conn),
-		querierClient: proto.NewQuerierClient(conn),
-		client:        client,
+		address: address,
+		name:    name,
+		conn:    conn,
+		client:  client,
 	}, nil
 }
 
@@ -68,7 +66,7 @@ func (store *LokiStore) Push(labels map[string]string, line string, t time.Time)
 		Entries: []*proto.EntryAdapter{entry},
 	}
 
-	_, err := store.pusherClient.Push(ctx, &proto.PushRequest{
+	_, err := proto.NewPusherClient(store.conn).Push(ctx, &proto.PushRequest{
 		Streams: []*proto.StreamAdapter{streamAdapter},
 	})
 
@@ -116,7 +114,7 @@ func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, st
 
 	defer cancel()
 
-	stream, err := store.querierClient.Tail(ctx, &proto.TailRequest{
+	stream, err := proto.NewQuerierClient(store.conn).Tail(ctx, &proto.TailRequest{
 		Query: logstore.ConstructSearch(logstore.LabelsMapToString(options.Labels, "=~", options.CustomSelectorSuffix), options.SearchParam),
 		Start: timestamppb.New(options.Start),
 		Limit: options.Limit,
@@ -161,7 +159,7 @@ func (store *LokiStore) GetLabelValues(options logstore.LabelValueOptions) ([]st
 
 	defer cancel()
 
-	labelValues, err := store.querierClient.Label(ctx, &proto.LabelRequest{
+	labelValues, err := proto.NewQuerierClient(store.conn).Label(ctx, &proto.LabelRequest{
 		Name:   options.Label,
 		Values: true,
 		Start:  timestamppb.New(options.Start),
