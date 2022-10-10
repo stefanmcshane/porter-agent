@@ -80,7 +80,7 @@ func (a *Alerter) shouldAlertImmediateJob(incident *models.Incident, triggeringP
 	}
 
 	for _, podAlert := range podAlerts {
-		if podAlert.Summary == incident.ToAPIType().Summary {
+		if podAlert.Summary == incident.GetInternalSummary() {
 			return false
 		}
 	}
@@ -121,7 +121,7 @@ func (a *Alerter) updateAlertConfig(incident *models.Incident, triggeringPodName
 	// create a new alert in the db
 	a.Repository.Alert.CreateAlert(&models.Alert{
 		IncidentID:        incident.ID,
-		Summary:           incident.ToAPIType().Summary,
+		Summary:           incident.GetInternalSummary(),
 		TriggeringPodName: triggeringPodName,
 	})
 
