@@ -172,25 +172,25 @@ func (i *Incident) toExternalSummary() string {
 		if len(uniquePods) > 1 {
 			if i.Severity == types.SeverityCritical {
 				return fmt.Sprintf(
-					"Your application %s in namespace %s is currently experiencing downtime. %d replicas are crashing due to: %s",
-					i.ReleaseName, i.ReleaseNamespace, len(uniquePods), i.GetInternalSummary(),
+					"Your application %s in namespace %s is currently experiencing downtime. %d replicas are crashing because %s.",
+					i.ReleaseName, i.ReleaseNamespace, len(uniquePods), strings.ToLower(i.GetInternalSummary()),
 				)
 			} else {
 				return fmt.Sprintf(
-					"%d replicas for the application %s in namespace %s have crashed due to: %s",
-					len(uniquePods), i.ReleaseName, i.ReleaseNamespace, i.GetInternalSummary(),
+					"%d replicas for the application %s in namespace %s have crashed because %s.",
+					len(uniquePods), i.ReleaseName, i.ReleaseNamespace, strings.ToLower(i.GetInternalSummary()),
 				)
 			}
 		} else {
 			if i.Severity == types.SeverityCritical {
 				return fmt.Sprintf(
-					"Your application %s in namespace %s is currently experiencing downtime. The application crashed due to: %s",
-					i.ReleaseName, i.ReleaseNamespace, i.GetInternalSummary(),
+					"Your application %s in namespace %s is currently experiencing downtime because %s.",
+					i.ReleaseName, i.ReleaseNamespace, strings.ToLower(i.GetInternalSummary()),
 				)
 			} else {
 				return fmt.Sprintf(
-					"Your application %s in namespace %s has crashed due to: %s",
-					i.ReleaseName, i.ReleaseNamespace, i.GetInternalSummary(),
+					"Your application %s in namespace %s has crashed because %s.",
+					i.ReleaseName, i.ReleaseNamespace, strings.ToLower(i.GetInternalSummary()),
 				)
 			}
 		}
@@ -199,14 +199,14 @@ func (i *Incident) toExternalSummary() string {
 	// if the incident is part of a job, we indicate that this was part of a job run
 	if strings.ToLower(string(i.InvolvedObjectKind)) == "job" {
 		return fmt.Sprintf(
-			"A job run for %s in namespace %s crashed due to: %s",
-			i.ReleaseName, i.ReleaseNamespace, i.GetInternalSummary(),
+			"A job run for %s in namespace %s crashed because %s.",
+			i.ReleaseName, i.ReleaseNamespace, strings.ToLower(i.GetInternalSummary()),
 		)
 	}
 
 	// otherwise, we just incidate that a single replica failed
 	return fmt.Sprintf(
-		"Your application %s in namespace %s has crashed due to: %s",
-		i.ReleaseName, i.ReleaseNamespace, i.GetInternalSummary(),
+		"Your application %s in namespace %s has crashed because %s.",
+		i.ReleaseName, i.ReleaseNamespace, strings.ToLower(i.GetInternalSummary()),
 	)
 }
