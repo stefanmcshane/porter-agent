@@ -57,7 +57,7 @@ type FilteredEvent struct {
 }
 
 type EventOwner struct {
-	Namespace, Name, Kind string
+	Namespace, Name, Kind, Revision string
 }
 
 // SetPodData is used to set the data for the pod directly. This is useful for cases where querying the
@@ -103,6 +103,13 @@ func (e *FilteredEvent) PopulateEventOwner(k8sClient kubernetes.Clientset) error
 		return fmt.Errorf("unable to populate event owner: pod has multiple owners")
 	}
 
+	// if pod has a revision annotation set, store the revision
+	var revision string
+
+	if rev, exists := e.Pod.Annotations["helm.sh/revision"]; exists {
+		revision = rev
+	}
+
 	switch o := e.Pod.OwnerReferences[0]; strings.ToLower(o.Kind) {
 	case "replicaset":
 		rs, err := k8sClient.AppsV1().ReplicaSets(e.PodNamespace).Get(
@@ -123,18 +130,28 @@ func (e *FilteredEvent) PopulateEventOwner(k8sClient kubernetes.Clientset) error
 			return fmt.Errorf("only replicasets with deployment owners are supported")
 		}
 
+		if revision == "" {
+			revision = rs.Name
+		}
+
 		e.Owner = &EventOwner{
 			Namespace: e.PodNamespace,
 			Name:      rs.OwnerReferences[0].Name,
 			Kind:      rs.OwnerReferences[0].Kind,
+			Revision:  revision,
 		}
 
 		return nil
 	case "job":
+		if revision == "" {
+			revision = o.Name
+		}
+
 		e.Owner = &EventOwner{
 			Namespace: e.PodNamespace,
 			Name:      o.Name,
 			Kind:      o.Kind,
+			Revision:  revision,
 		}
 
 		return nil

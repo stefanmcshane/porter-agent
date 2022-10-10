@@ -2,6 +2,7 @@ package models
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,15 +45,10 @@ func NewIncident() *Incident {
 
 func (i *Incident) ToAPITypeMeta() *types.IncidentMeta {
 	lastSeen := time.Now()
+	lastSeenEvent := i.getLastSeenEvent()
 
-	if len(i.Events) > 0 {
-		lastSeen = *i.Events[0].LastSeen
-
-		for _, e := range i.Events {
-			if e.LastSeen.After(lastSeen) {
-				lastSeen = *e.LastSeen
-			}
-		}
+	if lastSeenEvent != nil {
+		lastSeen = *lastSeenEvent.LastSeen
 	}
 
 	return &types.IncidentMeta{
@@ -103,11 +99,59 @@ func (i *Incident) GetInternalSummary() string {
 	return summary
 }
 
+func (i *Incident) getLatestRevisionName() string {
+	// we first look for revisions that can be parsed as an integer. if these exists, we
+	// pick the greatest revision.
+	currRevision := 0
+
+	for _, e := range i.Events {
+		if i, err := strconv.ParseInt(e.Revision, 10, 64); err == nil {
+			if i >= int64(currRevision) {
+				currRevision = int(i)
+			}
+		}
+	}
+
+	if currRevision != 0 {
+		return fmt.Sprintf("%d", currRevision)
+	}
+
+	// next, we look for an event with the latest lastSeen time and pick the revision from that
+	// event
+	lastSeenEvent := i.getLastSeenEvent()
+
+	if lastSeenEvent != nil {
+		return lastSeenEvent.Revision
+	}
+
+	return ""
+}
+
+func (i *Incident) getLastSeenEvent() *IncidentEvent {
+	if len(i.Events) > 0 {
+		lastSeenEvent := i.Events[0]
+
+		for _, e := range i.Events {
+			if e.LastSeen.After(*lastSeenEvent.LastSeen) {
+				lastSeenEvent = e
+			}
+		}
+
+		return &lastSeenEvent
+	}
+
+	return nil
+}
+
 func (i *Incident) getUniquePods() []string {
+	lastRevision := i.getLatestRevisionName()
+
 	uniquePods := make(map[string]string, 0)
 
 	for _, ev := range i.Events {
-		uniquePods[ev.PodName] = ev.PodName
+		if ev.Revision == lastRevision {
+			uniquePods[ev.PodName] = ev.PodName
+		}
 	}
 
 	res := make([]string, 0)

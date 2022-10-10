@@ -65,6 +65,7 @@ func matchesToIncidentEvent(k8sVersion KubernetesVersion, es map[event.FilteredE
 			Detail:         match.DetailGenerator(&filteredEvent),
 			PodName:        filteredEvent.PodName,
 			PodNamespace:   filteredEvent.PodNamespace,
+			Revision:       filteredEvent.Owner.Revision,
 			IsPrimaryCause: match.IsPrimaryCause,
 		})
 	}

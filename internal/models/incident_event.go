@@ -19,6 +19,10 @@ type IncidentEvent struct {
 	PodName      string
 	PodNamespace string
 
+	// The revision field can either refer to a revision number (from the pod annotations for porter
+	// charts) or the replicaset or immediate owner name.
+	Revision string
+
 	// Summary is a high-level reason for the incident. Each incident event that is designated
 	// as a "primary cause" should have the same summary across multiple pods.
 	Summary string
