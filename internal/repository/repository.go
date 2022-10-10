@@ -3,6 +3,7 @@ package repository
 import "gorm.io/gorm"
 
 type Repository struct {
+	Alert         *AlertRepository
 	Incident      *IncidentRepository
 	IncidentEvent *IncidentEventRepository
 	EventCache    *EventCacheRepository
@@ -10,6 +11,7 @@ type Repository struct {
 
 func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{
+		Alert:         NewAlertRepository(db),
 		Incident:      NewIncidentRepository(db),
 		IncidentEvent: NewIncidentEventRepository(db),
 		EventCache:    NewEventCacheRepository(db),

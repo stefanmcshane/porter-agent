@@ -1,6 +1,8 @@
 package models
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/porter-dev/porter-agent/api/server/types"
@@ -44,15 +46,13 @@ func (i *Incident) ToAPITypeMeta() *types.IncidentMeta {
 	lastSeen := time.Now()
 
 	if len(i.Events) > 0 {
-		// TODO: get the most recent event, not just the first
 		lastSeen = *i.Events[0].LastSeen
-	}
 
-	// TODO: generate a better summary
-	summary := "The release failed"
-
-	if len(i.Events) > 0 {
-		summary = i.Events[0].Summary
+		for _, e := range i.Events {
+			if e.LastSeen.After(lastSeen) {
+				lastSeen = *e.LastSeen
+			}
+		}
 	}
 
 	return &types.IncidentMeta{
@@ -68,24 +68,101 @@ func (i *Incident) ToAPITypeMeta() *types.IncidentMeta {
 		InvolvedObjectNamespace: i.InvolvedObjectNamespace,
 		Severity:                i.Severity,
 		LastSeen:                &lastSeen,
-		Summary:                 summary,
+		Summary:                 i.toExternalSummary(),
 	}
 }
 
 func (i *Incident) ToAPIType() *types.Incident {
 	incident := &types.Incident{
 		IncidentMeta: i.ToAPITypeMeta(),
+		Pods:         i.getUniquePods(),
 	}
 
 	incident.Detail = "The release failed"
 
-	if len(i.Events) > 0 {
-		incident.Detail = i.Events[0].Detail
-	}
-
-	for _, ev := range i.Events {
-		incident.Pods = append(incident.Pods, ev.PodName)
+	for _, e := range i.Events {
+		if e.IsPrimaryCause {
+			incident.Detail = e.Detail
+			break
+		}
 	}
 
 	return incident
+}
+
+func (i *Incident) GetInternalSummary() string {
+	summary := "The release failed"
+
+	for _, e := range i.Events {
+		if e.IsPrimaryCause {
+			summary = e.Summary
+			break
+		}
+	}
+
+	return summary
+}
+
+func (i *Incident) getUniquePods() []string {
+	uniquePods := make(map[string]string, 0)
+
+	for _, ev := range i.Events {
+		uniquePods[ev.PodName] = ev.PodName
+	}
+
+	res := make([]string, 0)
+
+	for _, podName := range uniquePods {
+		res = append(res, podName)
+	}
+
+	return res
+}
+
+func (i *Incident) toExternalSummary() string {
+	uniquePods := i.getUniquePods()
+
+	// if the incident is part of a deployment, we count the number of unique
+	// pods involved and generate a message.
+	if strings.ToLower(string(i.InvolvedObjectKind)) == "deployment" {
+		if len(uniquePods) > 1 {
+			if i.Severity == types.SeverityCritical {
+				return fmt.Sprintf(
+					"Your application %s in namespace %s is currently experiencing downtime. %d replicas are crashing due to: %s",
+					i.ReleaseName, i.ReleaseNamespace, len(uniquePods), i.GetInternalSummary(),
+				)
+			} else {
+				return fmt.Sprintf(
+					"%d replicas for the application %s in namespace %s have crashed due to: %s",
+					len(uniquePods), i.ReleaseName, i.ReleaseNamespace, i.GetInternalSummary(),
+				)
+			}
+		} else {
+			if i.Severity == types.SeverityCritical {
+				return fmt.Sprintf(
+					"Your application %s in namespace %s is currently experiencing downtime. The application crashed due to: %s",
+					i.ReleaseName, i.ReleaseNamespace, i.GetInternalSummary(),
+				)
+			} else {
+				return fmt.Sprintf(
+					"Your application %s in namespace %s has crashed due to: %s",
+					i.ReleaseName, i.ReleaseNamespace, i.GetInternalSummary(),
+				)
+			}
+		}
+	}
+
+	// if the incident is part of a job, we indicate that this was part of a job run
+	if strings.ToLower(string(i.InvolvedObjectKind)) == "job" {
+		return fmt.Sprintf(
+			"A job run for %s in namespace %s crashed due to: %s",
+			i.ReleaseName, i.ReleaseNamespace, i.GetInternalSummary(),
+		)
+	}
+
+	// otherwise, we just incidate that a single replica failed
+	return fmt.Sprintf(
+		"Your application %s in namespace %s has crashed due to: %s",
+		i.ReleaseName, i.ReleaseNamespace, i.GetInternalSummary(),
+	)
 }

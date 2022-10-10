@@ -29,28 +29,25 @@ type Alerter struct {
 	Logger             *logger.Logger
 }
 
-func (a *Alerter) HandleIncident(incident *models.Incident) error {
-	switch incident.Severity {
-	case types.SeverityCritical:
-		if a.shouldAlertCritical(incident) {
-			err := a.Client.NotifyNew(incident.ToAPIType())
-			if err != nil {
-				return err
-			}
-
-			return a.updateLastAlerted(incident)
+func (a *Alerter) HandleIncident(incident *models.Incident, triggeringPodName string) error {
+	// first we case on jobs, as they have a custom alerting configuration
+	if strings.ToLower(string(incident.InvolvedObjectKind)) == "job" && a.shouldAlertImmediateJob(incident, triggeringPodName) {
+		err := a.Client.NotifyNew(incident.ToAPIType())
+		if err != nil {
+			return err
 		}
 
-		return nil
-	case types.SeverityNormal:
-		if a.shouldAlertNormal(incident) {
-			err := a.Client.NotifyNew(incident.ToAPIType())
+		return a.updateAlertConfig(incident, triggeringPodName)
+	}
 
+	if incident.Severity == types.SeverityCritical {
+		if a.shouldAlertImmediateCritical(incident) {
+			err := a.Client.NotifyNew(incident.ToAPIType())
 			if err != nil {
 				return err
 			}
 
-			return a.updateLastAlerted(incident)
+			return a.updateAlertConfig(incident, triggeringPodName)
 		}
 	}
 
@@ -69,8 +66,30 @@ func (a *Alerter) HandleResolved(incident *models.Incident) error {
 	return nil
 }
 
+func (a *Alerter) shouldAlertImmediateJob(incident *models.Incident, triggeringPodName string) bool {
+	if a.AlertConfiguration.DefaultJobAlertConfiguration != JobAlertConfigurationEvery {
+		return false
+	}
+
+	// we determine if this job has previously been alerted for this specific pod run. since we want to
+	// alert separately on different incident summaries, we also check if there are any duplicate summaries.
+	podAlerts, err := a.Repository.Alert.ListAlertsByPodName(triggeringPodName)
+
+	if err != nil {
+		return true
+	}
+
+	for _, podAlert := range podAlerts {
+		if podAlert.Summary == incident.ToAPIType().Summary {
+			return false
+		}
+	}
+
+	return true
+}
+
 // for critical incidents, alert every hour
-func (a *Alerter) shouldAlertCritical(incident *models.Incident) bool {
+func (a *Alerter) shouldAlertImmediateCritical(incident *models.Incident) bool {
 	if incident.LastAlerted == nil {
 		return true
 	}
@@ -82,23 +101,30 @@ func (a *Alerter) shouldAlertCritical(incident *models.Incident) bool {
 }
 
 // for non-critical incidents, alert every day
-func (a *Alerter) shouldAlertNormal(incident *models.Incident) bool {
-	if incident.LastAlerted == nil {
-		return true
-	}
+// func (a *Alerter) shouldAlertNormal(incident *models.Incident) bool {
+// 	if incident.LastAlerted == nil {
+// 		return true
+// 	}
 
-	// if this is a job alert, check the alerter configuration
-	if strings.ToLower(string(incident.InvolvedObjectKind)) == "job" && a.AlertConfiguration.DefaultJobAlertConfiguration == JobAlertConfigurationEvery {
-		return true
-	}
+// 	// if this is a job alert, check the alerter configuration
+// 	if strings.ToLower(string(incident.InvolvedObjectKind)) == "job" && a.AlertConfiguration.DefaultJobAlertConfiguration == JobAlertConfigurationEvery {
+// 		return true
+// 	}
 
-	elapsedTime := time.Now().Sub(*incident.LastAlerted)
-	elapsedHours := elapsedTime.Truncate(time.Hour)
+// 	elapsedTime := time.Now().Sub(*incident.LastAlerted)
+// 	elapsedHours := elapsedTime.Truncate(time.Hour)
 
-	return elapsedHours >= 24
-}
+// 	return elapsedHours >= 24
+// }
 
-func (a *Alerter) updateLastAlerted(incident *models.Incident) error {
+func (a *Alerter) updateAlertConfig(incident *models.Incident, triggeringPodName string) error {
+	// create a new alert in the db
+	a.Repository.Alert.CreateAlert(&models.Alert{
+		IncidentID:        incident.ID,
+		Summary:           incident.ToAPIType().Summary,
+		TriggeringPodName: triggeringPodName,
+	})
+
 	now := time.Now()
 
 	incident.LastAlerted = &now

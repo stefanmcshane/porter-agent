@@ -112,7 +112,7 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 				incident.InvolvedObjectName = ownerRef.Name
 				incident.InvolvedObjectNamespace = ownerRef.Namespace
 
-				err := d.saveIncident(incident, ownerRef)
+				err := d.saveIncident(incident, ownerRef, alertedEvent.PodName)
 
 				if err != nil {
 					return err
@@ -128,7 +128,7 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 			incident.InvolvedObjectName = ownerRef.Name
 			incident.InvolvedObjectNamespace = ownerRef.Namespace
 
-			err := d.saveIncident(incident, ownerRef)
+			err := d.saveIncident(incident, ownerRef, alertedEvent.PodName)
 
 			if err != nil {
 				return err
@@ -145,7 +145,7 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 		incident.InvolvedObjectName = alertedEvent.PodName
 		incident.InvolvedObjectNamespace = alertedEvent.PodNamespace
 
-		err := d.saveIncident(incident, ownerRef)
+		err := d.saveIncident(incident, ownerRef, alertedEvent.PodName)
 
 		if err != nil {
 			return err
@@ -155,7 +155,7 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 	return nil
 }
 
-func (d *IncidentDetector) saveIncident(incident *models.Incident, ownerRef *event.EventOwner) error {
+func (d *IncidentDetector) saveIncident(incident *models.Incident, ownerRef *event.EventOwner, triggeringPodName string) error {
 	// if mergeWithMatchingIncident returns a non-nil incident, then we simply update the incident in the DB
 	if mergedIncident := d.mergeWithMatchingIncident(incident, ownerRef); mergedIncident != nil {
 		d.Logger.Info().Caller().Msgf("found matching incident %s", mergedIncident.UniqueID)
@@ -166,7 +166,7 @@ func (d *IncidentDetector) saveIncident(incident *models.Incident, ownerRef *eve
 			return err
 		}
 
-		return d.Alerter.HandleIncident(incident)
+		return d.Alerter.HandleIncident(incident, triggeringPodName)
 	}
 
 	incident, err := d.Repository.Incident.CreateIncident(incident)
@@ -175,7 +175,7 @@ func (d *IncidentDetector) saveIncident(incident *models.Incident, ownerRef *eve
 		return err
 	}
 
-	return d.Alerter.HandleIncident(incident)
+	return d.Alerter.HandleIncident(incident, triggeringPodName)
 }
 
 func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, ownerRef *event.EventOwner) *models.Incident {
