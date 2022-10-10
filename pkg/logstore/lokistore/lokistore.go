@@ -10,6 +10,7 @@ import (
 	"github.com/porter-dev/porter-agent/pkg/logstore"
 	"github.com/porter-dev/porter-agent/pkg/logstore/lokistore/proto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -17,7 +18,6 @@ type LokiStore struct {
 	name    string
 	address string
 	client  *Client
-	conn    *grpc.ClientConn
 }
 
 type LogStoreConfig struct {
@@ -38,21 +38,24 @@ func New(name string, config LogStoreConfig) (*LokiStore, error) {
 
 	fmt.Printf("creating new grpc connection to %s\n", address)
 
-	conn, err := grpc.Dial(address, grpc.WithInsecure())
-
-	if err != nil {
-		return nil, fmt.Errorf("error initializing loki client with name %s. Error: %w", name, err)
-	}
-
 	return &LokiStore{
 		address: address,
 		name:    name,
-		conn:    conn,
 		client:  client,
 	}, nil
 }
 
 func (store *LokiStore) Push(labels map[string]string, line string, t time.Time) error {
+	fmt.Printf("calling push on loki store\n")
+
+	conn, err := grpc.Dial(store.address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+	if err != nil {
+		return fmt.Errorf("error initializing loki client. Error: %w", err)
+	}
+
+	defer conn.Close()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 	defer cancel()
@@ -67,7 +70,7 @@ func (store *LokiStore) Push(labels map[string]string, line string, t time.Time)
 		Entries: []*proto.EntryAdapter{entry},
 	}
 
-	_, err := proto.NewPusherClient(store.conn).Push(ctx, &proto.PushRequest{
+	_, err = proto.NewPusherClient(conn).Push(ctx, &proto.PushRequest{
 		Streams: []*proto.StreamAdapter{streamAdapter},
 	})
 
@@ -79,6 +82,16 @@ func (store *LokiStore) Push(labels map[string]string, line string, t time.Time)
 }
 
 func (store *LokiStore) Query(options logstore.QueryOptions, w logstore.Writer, stopCh <-chan struct{}) error {
+	fmt.Printf("calling query on loki store\n")
+
+	conn, err := grpc.Dial(store.address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+	if err != nil {
+		return fmt.Errorf("error initializing loki client. Error: %w", err)
+	}
+
+	defer conn.Close()
+
 	qrResp, err := store.client.QueryRange(options)
 
 	if err != nil {
@@ -111,11 +124,21 @@ func (store *LokiStore) Query(options logstore.QueryOptions, w logstore.Writer, 
 }
 
 func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, stopCh <-chan struct{}) error {
+	fmt.Printf("calling tail on loki store\n")
+
+	conn, err := grpc.Dial(store.address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+	if err != nil {
+		return fmt.Errorf("error initializing loki client. Error: %w", err)
+	}
+
+	defer conn.Close()
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	defer cancel()
 
-	stream, err := proto.NewQuerierClient(store.conn).Tail(ctx, &proto.TailRequest{
+	stream, err := proto.NewQuerierClient(conn).Tail(ctx, &proto.TailRequest{
 		Query: logstore.ConstructSearch(logstore.LabelsMapToString(options.Labels, "=~", options.CustomSelectorSuffix), options.SearchParam),
 		Start: timestamppb.New(options.Start),
 		Limit: options.Limit,
@@ -156,11 +179,21 @@ func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, st
 }
 
 func (store *LokiStore) GetLabelValues(options logstore.LabelValueOptions) ([]string, error) {
+	fmt.Printf("calling get label values on loki store\n")
+
+	conn, err := grpc.Dial(store.address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+	if err != nil {
+		return nil, fmt.Errorf("error initializing loki client. Error: %w", err)
+	}
+
+	defer conn.Close()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 	defer cancel()
 
-	labelValues, err := proto.NewQuerierClient(store.conn).Label(ctx, &proto.LabelRequest{
+	labelValues, err := proto.NewQuerierClient(conn).Label(ctx, &proto.LabelRequest{
 		Name:   options.Label,
 		Values: true,
 		Start:  timestamppb.New(options.Start),
