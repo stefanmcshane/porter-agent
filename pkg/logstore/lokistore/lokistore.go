@@ -20,7 +20,6 @@ type LokiStore struct {
 	client        *Client
 	pusherClient  proto.PusherClient
 	querierClient proto.QuerierClient
-	closer        io.Closer
 }
 
 type LogStoreConfig struct {
@@ -50,13 +49,12 @@ func New(name string, config LogStoreConfig) (*LokiStore, error) {
 		name:          name,
 		pusherClient:  proto.NewPusherClient(conn),
 		querierClient: proto.NewQuerierClient(conn),
-		closer:        conn,
 		client:        client,
 	}, nil
 }
 
 func (store *LokiStore) Push(labels map[string]string, line string, t time.Time) error {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 	defer cancel()
 
@@ -159,7 +157,7 @@ func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, st
 }
 
 func (store *LokiStore) GetLabelValues(options logstore.LabelValueOptions) ([]string, error) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 	defer cancel()
 
