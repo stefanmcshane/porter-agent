@@ -54,7 +54,9 @@ func updateLokiStatus() {
 		return
 	}
 
-	_, err := grpc.Dial(lokiAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(lokiAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+	defer closeConnIfExists(conn)
 
 	if err != nil {
 		// TODO: we can use grpc.Code() to get the exact error codes
@@ -62,5 +64,11 @@ func updateLokiStatus() {
 		singleton = UnreachableStatus
 	} else {
 		singleton = ReachableStatus
+	}
+}
+
+func closeConnIfExists(conn *grpc.ClientConn) {
+	if conn != nil {
+		conn.Close()
 	}
 }
