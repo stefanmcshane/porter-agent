@@ -50,5 +50,6 @@ func (e *IncidentEvent) ToAPIType() *types.IncidentEvent {
 		PodNamespace: e.PodNamespace,
 		Summary:      e.Summary,
 		Detail:       e.Detail,
+		Revision:     e.Revision,
 	}
 }
