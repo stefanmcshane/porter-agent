@@ -97,7 +97,13 @@ func (a *Alerter) shouldAlertImmediateCritical(incident *models.Incident) bool {
 	elapsedTime := time.Now().Sub(*incident.LastAlerted)
 	elapsedHours := elapsedTime.Truncate(time.Hour)
 
-	return elapsedHours >= 1
+	// if the incident was created in the last day, alert every 6 hours
+	if incident.CreatedAt.After(time.Now().Add(-24 * time.Hour)) {
+		return elapsedHours >= 6
+	}
+
+	// otherwise, alert every day
+	return elapsedHours >= 24
 }
 
 // for non-critical incidents, alert every day
