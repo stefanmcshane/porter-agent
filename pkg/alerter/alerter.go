@@ -99,7 +99,7 @@ func (a *Alerter) shouldAlertImmediateCritical(incident *models.Incident) bool {
 	}
 
 	elapsedTime := time.Now().Sub(*incident.LastAlerted)
-	elapsedHours := elapsedTime.Truncate(time.Hour)
+	elapsedHours := elapsedTime.Truncate(time.Hour).Hours()
 
 	a.Logger.Info().Caller().Msgf("incident %s was last alerted %d hours ago", incident.UniqueID, elapsedHours)
 
@@ -111,23 +111,6 @@ func (a *Alerter) shouldAlertImmediateCritical(incident *models.Incident) bool {
 	// otherwise, alert every day
 	return elapsedHours >= 24
 }
-
-// for non-critical incidents, alert every day
-// func (a *Alerter) shouldAlertNormal(incident *models.Incident) bool {
-// 	if incident.LastAlerted == nil {
-// 		return true
-// 	}
-
-// 	// if this is a job alert, check the alerter configuration
-// 	if strings.ToLower(string(incident.InvolvedObjectKind)) == "job" && a.AlertConfiguration.DefaultJobAlertConfiguration == JobAlertConfigurationEvery {
-// 		return true
-// 	}
-
-// 	elapsedTime := time.Now().Sub(*incident.LastAlerted)
-// 	elapsedHours := elapsedTime.Truncate(time.Hour)
-
-// 	return elapsedHours >= 24
-// }
 
 func (a *Alerter) updateAlertConfig(incident *models.Incident, triggeringPodName string) error {
 	// create a new alert in the db
