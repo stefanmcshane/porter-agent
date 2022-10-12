@@ -65,16 +65,18 @@ func (h *GetLogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res := &types.GetLogResponse{
-		Logs:         lb.Lines,
-		ContinueTime: lb.EarliestTimestamp,
+		Logs:                 lb.Lines,
+		BackwardContinueTime: lb.BackwardContinueTime,
+		ForwardContinueTime:  lb.ForwardContinueTime,
 	}
 
 	h.resultWriter.WriteResult(w, r, res)
 }
 
 type logBuffer struct {
-	Lines             []types.LogLine
-	EarliestTimestamp *time.Time
+	Lines                []types.LogLine
+	BackwardContinueTime *time.Time
+	ForwardContinueTime  *time.Time
 }
 
 func (l *logBuffer) Write(timestamp *time.Time, log string) error {
@@ -82,12 +84,26 @@ func (l *logBuffer) Write(timestamp *time.Time, log string) error {
 		l.Lines = make([]types.LogLine, 0)
 	}
 
+	if l.BackwardContinueTime == nil {
+		l.BackwardContinueTime = timestamp
+	}
+
+	if l.ForwardContinueTime == nil {
+		l.ForwardContinueTime = timestamp
+	}
+
 	l.Lines = append(l.Lines, types.LogLine{
 		Timestamp: timestamp,
 		Line:      log,
 	})
 
-	l.EarliestTimestamp = timestamp
+	if timestamp.Before(*l.BackwardContinueTime) {
+		l.BackwardContinueTime = timestamp
+	}
+
+	if timestamp.After(*l.ForwardContinueTime) {
+		l.ForwardContinueTime = timestamp
+	}
 
 	return nil
 }
