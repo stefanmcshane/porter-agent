@@ -195,6 +195,11 @@ func (e *FilteredEvent) Populate(k8sClient kubernetes.Clientset) error {
 			return err
 		}
 
+		// if the release name hasn't been populated, attempt to populate it from the job
+		if e.ReleaseName == "" {
+			e.ReleaseName = job.Labels["app.kubernetes.io/instance"]
+		}
+
 		chartLabel = job.Labels["helm.sh/chart"]
 	}
 
