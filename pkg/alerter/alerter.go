@@ -79,8 +79,12 @@ func (a *Alerter) shouldAlertImmediateJob(incident *models.Incident, triggeringP
 		return true
 	}
 
+	a.Logger.Info().Caller().Msgf("found %d alerts corresponding to pod %s", len(podAlerts), triggeringPodName)
+
 	for _, podAlert := range podAlerts {
 		if podAlert.Summary == incident.GetInternalSummary() {
+			a.Logger.Info().Caller().Msgf("found matching summary for pod %s : %s", triggeringPodName, podAlert.Summary)
+
 			return false
 		}
 	}
@@ -96,6 +100,8 @@ func (a *Alerter) shouldAlertImmediateCritical(incident *models.Incident) bool {
 
 	elapsedTime := time.Now().Sub(*incident.LastAlerted)
 	elapsedHours := elapsedTime.Truncate(time.Hour)
+
+	a.Logger.Info().Caller().Msgf("incident %s was last alerted %d hours ago", incident.UniqueID, elapsedHours)
 
 	// if the incident was created in the last day, alert every 6 hours
 	if incident.CreatedAt.After(time.Now().Add(-24 * time.Hour)) {
