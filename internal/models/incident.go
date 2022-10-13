@@ -65,6 +65,7 @@ func (i *Incident) ToAPITypeMeta() *types.IncidentMeta {
 		Severity:                i.Severity,
 		LastSeen:                &lastSeen,
 		Summary:                 i.toExternalSummary(),
+		ShortSummary:            i.GetInternalSummary(),
 	}
 }
 
