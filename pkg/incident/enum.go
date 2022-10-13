@@ -59,12 +59,10 @@ func init() {
 	eventMatch1_20 := make([]EventMatch, 0)
 
 	eventMatch1_20 = append(eventMatch1_20, EventMatch{
-		SourceMatch: event.K8sEvent,
-		Summary:     FailingHealthCheck,
-		DetailGenerator: func(e *event.FilteredEvent) string {
-			return "Your application was restarted because it failing its startup health check. You can configure the startup health check from the Advanced tab of your application settings."
-		},
-		ReasonMatch: "Killing",
+		SourceMatch:     event.K8sEvent,
+		Summary:         FailingHealthCheck,
+		DetailGenerator: generateFailingStartupMessage,
+		ReasonMatch:     "Killing",
 		MessageMatch: regexp.MustCompile(
 			fmt.Sprintf(`Container %s failed startup probe, will be restarted`, RFC1123Name),
 		),
@@ -127,14 +125,12 @@ func init() {
 	})
 
 	eventMatch1_20 = append(eventMatch1_20, EventMatch{
-		SourceMatch: event.Pod,
-		Summary:     OutOfMemory,
-		DetailGenerator: func(e *event.FilteredEvent) string {
-			return fmt.Sprintf("Your application ran out of memory. Reduce the amount of memory your application is consuming or bump up its memory limit from the Resources tab")
-		},
-		ReasonMatch:    "OOMKilled",
-		MessageMatch:   regexp.MustCompile(".*"),
-		IsPrimaryCause: true,
+		SourceMatch:     event.Pod,
+		Summary:         OutOfMemory,
+		DetailGenerator: generateOutOfMemoryMessage,
+		ReasonMatch:     "OOMKilled",
+		MessageMatch:    regexp.MustCompile(".*"),
+		IsPrimaryCause:  true,
 	})
 
 	eventMatch1_20 = append(eventMatch1_20, EventMatch{
@@ -266,6 +262,27 @@ func generateFailingLivenessMessage(e *event.FilteredEvent) string {
 	}
 
 	sentences = append(sentences, "If the health check is configured correctly, there are several other reasons why the startup health check may be failing. Consult the documentation here: https://docs.porter.run/deploying-applications/zero-downtime-deployments/#health-checks.")
+
+	return strings.Join(sentences, " ")
+}
+
+func generateOutOfMemoryMessage(e *event.FilteredEvent) string {
+	sentences := make([]string, 0)
+
+	// get the memory limit, if it exists
+	if e.Pod != nil {
+		resources := e.Pod.Spec.Containers[0].Resources
+
+		if memLimit := resources.Limits.Memory(); memLimit != nil {
+			sentences = append(sentences, "Your application was restarted because it exceeded its memory limit of %s.", memLimit.String())
+		}
+	}
+
+	if len(sentences) == 0 {
+		sentences = append(sentences, "Your application was restarted because it ran out of memory.")
+	}
+
+	sentences = append(sentences, "Reduce the amount of memory your application is consuming or increase its memory limit from the Resources tab.")
 
 	return strings.Join(sentences, " ")
 }
