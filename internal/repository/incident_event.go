@@ -42,7 +42,7 @@ func (r *IncidentEventRepository) ListEvents(
 	db := r.db.Model(&models.IncidentEvent{})
 
 	if filter.IncidentID != nil {
-		db = db.Where("id = ?", *filter.IncidentID)
+		db = db.Where("incident_id = ?", *filter.IncidentID)
 	}
 
 	if filter.PodName != nil {
