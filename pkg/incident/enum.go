@@ -54,6 +54,8 @@ func init() {
 	EventEnum = make(map[KubernetesVersion][]EventMatch)
 
 	// Kubernetes 1.20 event matches
+	// Image error reference: https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/images/types.go
+	// Container error reference: https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/container/sync_result.go
 	eventMatch1_20 := make([]EventMatch, 0)
 
 	eventMatch1_20 = append(eventMatch1_20, EventMatch{
@@ -139,7 +141,7 @@ func init() {
 		SourceMatch: event.Pod,
 		Summary:     InvalidImage,
 		DetailGenerator: func(e *event.FilteredEvent) string {
-			return fmt.Sprintf("Your application cannot pull from the image registry.")
+			return fmt.Sprintf("Your application cannot pull from the image registry. Details: %s", e.KubernetesMessage)
 		},
 		ReasonMatch:    "ImagePullBackOff",
 		MessageMatch:   regexp.MustCompile(".*"),
@@ -150,7 +152,7 @@ func init() {
 		SourceMatch: event.Pod,
 		Summary:     InvalidImage,
 		DetailGenerator: func(e *event.FilteredEvent) string {
-			return fmt.Sprintf("Your application cannot pull from the image registry.")
+			return fmt.Sprintf("Your application cannot pull from the image registry. Details: %s", e.KubernetesMessage)
 		},
 		ReasonMatch:    "ErrImagePull",
 		MessageMatch:   regexp.MustCompile(".*"),
