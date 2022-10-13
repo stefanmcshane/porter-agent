@@ -249,12 +249,15 @@ func NewFilteredEventsFromPod(pod *v1.Pod) []*FilteredEvent {
 
 			// check if the last transition time was before 15 minutes ago
 			if condition.LastTransitionTime.Time.Before(now.Add(-15 * time.Minute)) {
+				elapsedTime := now.Sub(condition.LastTransitionTime.Time)
+				elapsedMinutes := elapsedTime.Truncate(time.Minute).Minutes()
+
 				res = append(res, &FilteredEvent{
 					Source:            Pod,
 					PodName:           pod.Name,
 					PodNamespace:      pod.Namespace,
 					KubernetesReason:  "Pending",
-					KubernetesMessage: fmt.Sprintf("Pod has been pending for %f minutes due to %s", now.Sub(condition.LastTransitionTime.Time).Minutes(), condition.Message),
+					KubernetesMessage: fmt.Sprintf("Pod has been pending for %.0f minutes due to %s", elapsedMinutes, condition.Message),
 					Severity:          EventSeverityHigh,
 					Timestamp:         &now,
 				})
