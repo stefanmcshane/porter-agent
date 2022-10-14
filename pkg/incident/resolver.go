@@ -99,8 +99,18 @@ func (r *IncidentResolver) isDeploymentResolved(incident *models.Incident) bool 
 	// if this is a critical incident, we check whether the deployment has been running
 	// successfully for at least the critical buffer window
 	if incident.Severity == types.SeverityCritical {
-		return !r.isWithinCriticalBufferWindow(incident.LastSeen) &&
-			!isDeploymentFailing(r.KubeClient, incident.InvolvedObjectNamespace, incident.InvolvedObjectName)
+		withinBufferWindow := r.isWithinCriticalBufferWindow(incident.LastSeen)
+		isFailing := isDeploymentFailing(r.KubeClient, incident.InvolvedObjectNamespace, incident.InvolvedObjectName)
+
+		if withinBufferWindow {
+			r.Logger.Info().Caller().Msgf("incident %s is not resolved because %s is within the critical buffer window", incident.UniqueID, incident.LastSeen)
+		}
+
+		if isFailing {
+			r.Logger.Info().Caller().Msgf("incident %s is not resolved because %s is still failing", incident.UniqueID, incident.InvolvedObjectName)
+		}
+
+		return !withinBufferWindow && !isFailing
 	}
 
 	// If this is not a critical incident, we check the buffer window for when this was last seen, because pods will
