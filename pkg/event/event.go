@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/porter-dev/porter-agent/api/server/types"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -137,7 +138,7 @@ func (e *FilteredEvent) PopulateEventOwner(k8sClient kubernetes.Clientset) error
 		e.Owner = &EventOwner{
 			Namespace: e.PodNamespace,
 			Name:      rs.OwnerReferences[0].Name,
-			Kind:      rs.OwnerReferences[0].Kind,
+			Kind:      string(types.InvolvedObjectDeployment),
 			Revision:  revision,
 		}
 

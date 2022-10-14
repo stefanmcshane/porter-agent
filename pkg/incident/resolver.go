@@ -1,6 +1,7 @@
 package incident
 
 import (
+	"strings"
 	"time"
 
 	"github.com/porter-dev/porter-agent/api/server/types"
@@ -83,12 +84,12 @@ func (r *IncidentResolver) handleResolved(incident *models.Incident) error {
 
 func (r *IncidentResolver) isResolved(incident *models.Incident) bool {
 	// switch on the incident type
-	switch incident.InvolvedObjectKind {
-	case types.InvolvedObjectDeployment:
+	switch strings.ToLower(string(incident.InvolvedObjectKind)) {
+	case "deployment":
 		return r.isDeploymentResolved(incident)
-	case types.InvolvedObjectJob:
+	case "job":
 		return r.isJobResolved(incident)
-	case types.InvolvedObjectPod:
+	case "pod":
 		return r.isPodResolved(incident)
 	}
 
