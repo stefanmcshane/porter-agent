@@ -156,7 +156,7 @@ func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, st
 	}
 }
 
-func (store *LokiStore) GetPodLabelValues(options logstore.LabelPodValueOptions) ([]string, error) {
+func (store *LokiStore) GetPodLabelValues(options logstore.LabelValueOptions) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 	defer cancel()
@@ -167,19 +167,10 @@ func (store *LokiStore) GetPodLabelValues(options logstore.LabelPodValueOptions)
 			Start: timestamppb.New(options.Start),
 			End:   timestamppb.New(options.End),
 			Groups: []string{
-				fmt.Sprintf(`{pod=~"%s.*"}`, options.Prefix),
+				fmt.Sprintf(`{pod=~"%s.*"}`, options.PodPrefix),
 			},
 		},
 	)
-
-	fmt.Println("query is", fmt.Sprintf(`{pod=~"%s.*"}`, options.Prefix))
-
-	// labelValues, err := store.querierClient.Label(ctx, &proto.LabelRequest{
-	// 	Name:   options.Label,
-	// 	Values: true,
-	// 	Start:  timestamppb.New(options.Start),
-	// 	End:    timestamppb.New(options.End),
-	// })
 
 	if err != nil {
 		return nil, err
@@ -188,8 +179,6 @@ func (store *LokiStore) GetPodLabelValues(options logstore.LabelPodValueOptions)
 	uniquePods := make(map[string]string, 0)
 
 	for _, series := range seriesResp.GetSeries() {
-		fmt.Println("SERIES IS", series.Labels)
-
 		if podLabel, exists := series.Labels["pod"]; exists {
 			uniquePods[podLabel] = podLabel
 		}
@@ -199,6 +188,43 @@ func (store *LokiStore) GetPodLabelValues(options logstore.LabelPodValueOptions)
 
 	for _, uniquePod := range uniquePods {
 		resp = append(resp, uniquePod)
+	}
+
+	return resp, nil
+}
+
+func (store *LokiStore) GetRevisionLabelValues(options logstore.LabelValueOptions) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+	defer cancel()
+
+	seriesResp, err := store.querierClient.Series(
+		ctx,
+		&proto.SeriesRequest{
+			Start: timestamppb.New(options.Start),
+			End:   timestamppb.New(options.End),
+			Groups: []string{
+				fmt.Sprintf(`{pod=~"%s.*"}`, options.PodPrefix),
+			},
+		},
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	uniqueRevisions := make(map[string]string, 0)
+
+	for _, series := range seriesResp.GetSeries() {
+		if revisionLabel, exists := series.Labels["helm_sh_revision"]; exists {
+			uniqueRevisions[revisionLabel] = revisionLabel
+		}
+	}
+
+	resp := make([]string, 0)
+
+	for _, uniqueRevision := range uniqueRevisions {
+		resp = append(resp, uniqueRevision)
 	}
 
 	return resp, nil

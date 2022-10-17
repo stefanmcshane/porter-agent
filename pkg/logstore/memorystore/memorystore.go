@@ -138,6 +138,10 @@ func (store *MemoryStore) Push(labels map[string]string, line string, t time.Tim
 	return nil
 }
 
-func (store *MemoryStore) GetPodLabelValues(options logstore.LabelPodValueOptions) ([]string, error) {
+func (store *MemoryStore) GetPodLabelValues(options logstore.LabelValueOptions) ([]string, error) {
+	return []string{}, nil
+}
+
+func (store *MemoryStore) GetRevisionLabelValues(options logstore.LabelValueOptions) ([]string, error) {
 	return []string{}, nil
 }

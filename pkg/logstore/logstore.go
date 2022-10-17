@@ -24,16 +24,16 @@ type QueryOptions struct {
 	Direction            string
 }
 
-type LabelPodValueOptions struct {
-	Label  string
-	Start  time.Time
-	End    time.Time
-	Prefix string
+type LabelValueOptions struct {
+	Start     time.Time
+	End       time.Time
+	PodPrefix string
 }
 
 type LogStore interface {
 	Query(options QueryOptions, writer Writer, stopCh <-chan struct{}) error
 	Tail(options TailOptions, writer Writer, stopCh <-chan struct{}) error
 	Push(labels map[string]string, line string, t time.Time) error
-	GetPodLabelValues(options LabelPodValueOptions) ([]string, error)
+	GetPodLabelValues(options LabelValueOptions) ([]string, error)
+	GetRevisionLabelValues(options LabelValueOptions) ([]string, error)
 }

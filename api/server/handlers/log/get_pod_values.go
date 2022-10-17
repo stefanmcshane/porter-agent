@@ -43,11 +43,10 @@ func (h *GetPodValuesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		req.EndRange = &now
 	}
 
-	podVals, err := h.Config.LogStore.GetPodLabelValues(logstore.LabelPodValueOptions{
-		Start:  *req.StartRange,
-		End:    *req.EndRange,
-		Label:  "pod",
-		Prefix: req.MatchPrefix,
+	podVals, err := h.Config.LogStore.GetPodLabelValues(logstore.LabelValueOptions{
+		Start:     *req.StartRange,
+		End:       *req.EndRange,
+		PodPrefix: req.MatchPrefix,
 	})
 
 	if err != nil {

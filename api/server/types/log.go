@@ -30,6 +30,7 @@ type GetPodValuesRequest struct {
 }
 
 type GetRevisionValuesRequest struct {
-	StartRange *time.Time `schema:"start_range"`
-	EndRange   *time.Time `schema:"end_range"`
+	StartRange  *time.Time `schema:"start_range"`
+	EndRange    *time.Time `schema:"end_range"`
+	MatchPrefix string     `schema:"match_prefix"`
 }
