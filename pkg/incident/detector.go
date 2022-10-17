@@ -172,6 +172,8 @@ func (d *IncidentDetector) saveIncident(incident *models.Incident, ownerRef *eve
 		return d.Alerter.HandleIncident(incident, triggeringPodName)
 	}
 
+	d.Logger.Info().Caller().Msgf("creating new incident %s - %s of kind %s", incident.UniqueID, incident.InvolvedObjectName, incident.InvolvedObjectKind)
+
 	incident, err := d.Repository.Incident.CreateIncident(incident)
 
 	if err != nil {
@@ -219,7 +221,7 @@ func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, 
 				mergedEvents := mergeEvents(candidateMatch.Events, incident.Events)
 				candidateMatch.Events = mergedEvents
 
-				// if there are different pods listed in the events, we promote this to a "Deployment" event
+				// if there are different pods listed in the events, we promote this to a "Deployment" or "Job" event
 				if numDistinctPods(mergedEvents) > 1 {
 					candidateMatch.InvolvedObjectKind = types.InvolvedObjectKind(ownerRef.Kind)
 					candidateMatch.InvolvedObjectName = ownerRef.Name

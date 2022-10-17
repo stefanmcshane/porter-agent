@@ -284,7 +284,7 @@ func generateOutOfMemoryMessage(e *event.FilteredEvent) string {
 		resources := e.Pod.Spec.Containers[0].Resources
 
 		if memLimit := resources.Limits.Memory(); memLimit != nil {
-			sentences = append(sentences, "Your application was restarted because it exceeded its memory limit of %s.", memLimit.String())
+			sentences = append(sentences, fmt.Sprintf("Your application was restarted because it exceeded its memory limit of %s.", memLimit.String()))
 		}
 	}
 
