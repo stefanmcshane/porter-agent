@@ -6,9 +6,7 @@ import (
 
 	"github.com/porter-dev/porter-agent/api/server/config"
 	"github.com/porter-dev/porter-agent/api/server/types"
-	"github.com/porter-dev/porter-agent/pkg/logstore"
 	"github.com/porter-dev/porter/api/server/shared"
-	"github.com/porter-dev/porter/api/server/shared/apierrors"
 )
 
 type GetRevisionValuesHandler struct {
@@ -43,16 +41,16 @@ func (h *GetRevisionValuesHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		req.EndRange = &now
 	}
 
-	vals, err := h.Config.LogStore.GetLabelValues(logstore.LabelValueOptions{
-		Start: *req.StartRange,
-		End:   *req.EndRange,
-		Label: "helm_sh_revision",
-	})
+	// vals, err := h.Config.LogStore.GetLabelValues(logstore.LabelValueOptions{
+	// 	Start: *req.StartRange,
+	// 	End:   *req.EndRange,
+	// 	Label: "helm_sh_revision",
+	// })
 
-	if err != nil {
-		apierrors.HandleAPIError(h.Config.Logger, h.Config.Alerter, w, r, apierrors.NewErrInternal(err), true)
-		return
-	}
+	// if err != nil {
+	// 	apierrors.HandleAPIError(h.Config.Logger, h.Config.Alerter, w, r, apierrors.NewErrInternal(err), true)
+	// 	return
+	// }
 
-	h.resultWriter.WriteResult(w, r, vals)
+	// h.resultWriter.WriteResult(w, r, vals)
 }

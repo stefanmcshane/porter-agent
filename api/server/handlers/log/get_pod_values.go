@@ -2,7 +2,6 @@ package log
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/porter-dev/porter-agent/api/server/config"
@@ -44,10 +43,11 @@ func (h *GetPodValuesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		req.EndRange = &now
 	}
 
-	candidateVals, err := h.Config.LogStore.GetLabelValues(logstore.LabelValueOptions{
-		Start: *req.StartRange,
-		End:   *req.EndRange,
-		Label: "pod",
+	podVals, err := h.Config.LogStore.GetPodLabelValues(logstore.LabelPodValueOptions{
+		Start:  *req.StartRange,
+		End:    *req.EndRange,
+		Label:  "pod",
+		Prefix: req.MatchPrefix,
 	})
 
 	if err != nil {
@@ -55,13 +55,13 @@ func (h *GetPodValuesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	res := make([]string, 0)
+	// res := make([]string, 0)
 
-	for _, candidateVal := range candidateVals {
-		if strings.HasPrefix(candidateVal, req.MatchPrefix) {
-			res = append(res, candidateVal)
-		}
-	}
+	// for _, candidateVal := range candidateVals {
+	// 	if strings.HasPrefix(candidateVal, req.MatchPrefix) {
+	// 		res = append(res, candidateVal)
+	// 	}
+	// }
 
-	h.resultWriter.WriteResult(w, r, res)
+	h.resultWriter.WriteResult(w, r, podVals)
 }
