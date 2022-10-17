@@ -157,9 +157,16 @@ func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, st
 }
 
 func (store *LokiStore) GetPodLabelValues(options logstore.LabelValueOptions) ([]string, error) {
+	var groupString string
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 	defer cancel()
+
+	if options.Revision != "" {
+		groupString = fmt.Sprintf(`{pod=~"%s.*",helm_sh_revision="%s"}`, options.PodPrefix, options.Revision)
+	} else {
+		groupString = fmt.Sprintf(`{pod=~"%s.*"}`, options.PodPrefix)
+	}
 
 	seriesResp, err := store.querierClient.Series(
 		ctx,
@@ -167,7 +174,7 @@ func (store *LokiStore) GetPodLabelValues(options logstore.LabelValueOptions) ([
 			Start: timestamppb.New(options.Start),
 			End:   timestamppb.New(options.End),
 			Groups: []string{
-				fmt.Sprintf(`{pod=~"%s.*"}`, options.PodPrefix),
+				groupString,
 			},
 		},
 	)
