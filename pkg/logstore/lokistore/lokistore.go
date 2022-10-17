@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/porter-dev/porter-agent/pkg/logstore"
@@ -157,48 +159,40 @@ func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, st
 }
 
 func (store *LokiStore) GetPodLabelValues(options logstore.LabelValueOptions) ([]string, error) {
-	var groupString string
+	var matchRegexExpr string
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 	defer cancel()
 
 	if options.Revision != "" {
-		groupString = fmt.Sprintf(`{pod=~"%s.*",helm_sh_revision="%s"}`, options.PodPrefix, options.Revision)
+		matchRegexExpr = fmt.Sprintf("%s-%s_%s", options.PodPrefix, "[a-z0-9]+(-[a-z0-9]+)*", options.Revision)
 	} else {
-		groupString = fmt.Sprintf(`{pod=~"%s.*"}`, options.PodPrefix)
+		matchRegexExpr = fmt.Sprintf("%s-%s", options.PodPrefix, "[a-z0-9]+(-[a-z0-9]+)*")
 	}
 
-	fmt.Println("group string is", groupString)
-
-	seriesResp, err := store.querierClient.Series(
-		ctx,
-		&proto.SeriesRequest{
-			Start: timestamppb.New(options.Start),
-			End:   timestamppb.New(options.End),
-			Groups: []string{
-				groupString,
-			},
-		},
-	)
+	labelValues, err := store.querierClient.Label(ctx, &proto.LabelRequest{
+		Name:   "porter_pod_name",
+		Values: true,
+		Start:  timestamppb.New(options.Start),
+		End:    timestamppb.New(options.End),
+	})
 
 	if err != nil {
 		return nil, err
 	}
 
-	uniquePods := make(map[string]string, 0)
-
-	for _, series := range seriesResp.GetSeries() {
-		fmt.Println("got series:", series, series.Labels)
-
-		if podLabel, exists := series.Labels["pod"]; exists {
-			uniquePods[podLabel] = podLabel
-		}
-	}
-
 	resp := make([]string, 0)
+	regex := regexp.MustCompile(matchRegexExpr)
 
-	for _, uniquePod := range uniquePods {
-		resp = append(resp, uniquePod)
+	for _, candidatePod := range labelValues.GetValues() {
+		if regex.Match([]byte(candidatePod)) {
+			// strip the candidate pod with understore
+			splStr := strings.Split(candidatePod, "_")
+
+			if len(splStr) == 2 {
+				resp = append(resp, splStr[0])
+			}
+		}
 	}
 
 	return resp, nil
