@@ -14,4 +14,5 @@ type EventCache struct {
 	PodName      string
 	PodNamespace string
 	Timestamp    *time.Time
+	Revision     string
 }
