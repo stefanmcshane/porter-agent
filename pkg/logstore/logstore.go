@@ -28,6 +28,7 @@ type LabelValueOptions struct {
 	Start     time.Time
 	End       time.Time
 	PodPrefix string
+	Revision  string
 }
 
 type LogStore interface {

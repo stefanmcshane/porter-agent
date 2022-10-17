@@ -167,7 +167,7 @@ func (store *LokiStore) GetPodLabelValues(options logstore.LabelValueOptions) ([
 			Start: timestamppb.New(options.Start),
 			End:   timestamppb.New(options.End),
 			Groups: []string{
-				fmt.Sprintf(`{pod=~"%s.*"}`, options.PodPrefix),
+				fmt.Sprintf(`{pod=~"%s.*",helm_sh_revision="%s"}`, options.PodPrefix, options.Revision),
 			},
 		},
 	)
