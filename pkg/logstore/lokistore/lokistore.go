@@ -168,6 +168,8 @@ func (store *LokiStore) GetPodLabelValues(options logstore.LabelValueOptions) ([
 		groupString = fmt.Sprintf(`{pod=~"%s.*"}`, options.PodPrefix)
 	}
 
+	fmt.Println("group string is", groupString)
+
 	seriesResp, err := store.querierClient.Series(
 		ctx,
 		&proto.SeriesRequest{
@@ -186,6 +188,8 @@ func (store *LokiStore) GetPodLabelValues(options logstore.LabelValueOptions) ([
 	uniquePods := make(map[string]string, 0)
 
 	for _, series := range seriesResp.GetSeries() {
+		fmt.Println("got series:", series, series.Labels)
+
 		if podLabel, exists := series.Labels["pod"]; exists {
 			uniquePods[podLabel] = podLabel
 		}
