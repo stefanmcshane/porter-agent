@@ -29,20 +29,23 @@ type IncidentDetector struct {
 //
 // It determines if an incident should be alerted based on the following algorithm:
 // 1. What is the event type?
-//     1. `Normal`: do not alert
-//     2. `Critical`: 2
+//  1. `Normal`: do not alert
+//  2. `Critical`: 2
+//
 // 2. Did the event trigger a container restart or prevent the pod from starting up?
-//     1. Yes: 3
-//     2. No: do not alert
+//  1. Yes: 3
+//  2. No: do not alert
+//
 // 3a. (If Deployment) Are there more pods unavailable than the deployments `maxUnavailable` field permits?
-//     1. Yes: 4
-//     2. No: 5
+//  1. Yes: 4
+//  2. No: 5
+//
 // 3b. (If Job) Does the alerting threshold match configuration for this job?
-//     1. Yes: 4
-//     2. No: 5
-// 4. Trigger an immediate alert and create a critical incident for the user.
-// 5. Query for past events from this pod. If the event has been triggered a certain number of times
-//    (configurable) in a certain time window (configurable), create a warning incident for the user.
+//  1. Yes: 4
+//  2. No: 5
+//  4. Trigger an immediate alert and create a critical incident for the user.
+//  5. Query for past events from this pod. If the event has been triggered a certain number of times
+//     (configurable) in a certain time window (configurable), create a warning incident for the user.
 func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 	alertedEvents := make([]*event.FilteredEvent, 0)
 

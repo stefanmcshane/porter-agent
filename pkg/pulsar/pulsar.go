@@ -7,11 +7,11 @@ import "time"
 // can be used under any piece of code that needs
 // to periodically execute.
 // We can use it in the following way:
+//
 //	p := pulsar.NewPulsar(1, time.Second)	// pulse every 1 second
 //	for pulse := range p.Pulsate() {
 //		fmt.Println("received a pulse", pulse)
 //	}
-//
 type Pulsar struct {
 	Period   time.Duration
 	pulse    *time.Ticker
@@ -31,6 +31,7 @@ func (p *Pulsar) Stop() {
 
 // Pulsate starts pulsating an existing pulsar. The
 // pulses can be consumed on the returned channel.
+//
 //	returns a chan time.Time
 func (p *Pulsar) Pulsate() chan time.Time {
 	// collapsing a neutron star
@@ -52,6 +53,7 @@ func (p *Pulsar) Pulsate() chan time.Time {
 
 // NewPulsar creates a new Pulsar object and returns
 // a pointer to it. Takes the following args:
+//
 //	period int: time period for the pulses
 //	timeUnit time.Duration: the unit eg. time.MilliSecond
 //		time.Second etc.
