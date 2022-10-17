@@ -20,8 +20,8 @@ import (
 )
 
 // EventController listens to events from the Kubernetes API and performs the following operations concurrently:
-//   1. Stores the events in the given event store
-//   2. Triggers the incident detection loop
+//  1. Stores the events in the given event store
+//  2. Triggers the incident detection loop
 type EventController struct {
 	KubeClient       *kubernetes.Clientset
 	KubeVersion      incident.KubernetesVersion
