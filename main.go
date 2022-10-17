@@ -176,6 +176,7 @@ func main() {
 
 	r.Method("GET", "/logs", logHandlers.NewGetLogHandler(conf))
 	r.Method("GET", "/logs/pod_values", logHandlers.NewGetPodValuesHandler(conf))
+	r.Method("GET", "/logs/revision_values", logHandlers.NewGetRevisionValuesHandler(conf))
 
 	r.Method("GET", "/events", eventHandlers.NewGetEventHandler(conf))
 
