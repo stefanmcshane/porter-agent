@@ -10,6 +10,11 @@ func LabelsMapToString(labels map[string]string, matcher string, additionalQuery
 	lstrs := make([]string, 0, len(labels))
 
 	for l, v := range labels {
+		// Compact on the labels that are not set
+		if v == "" {
+			continue
+		}
+
 		lstrs = append(lstrs, fmt.Sprintf("%s%s%q", l, matcher, v))
 	}
 

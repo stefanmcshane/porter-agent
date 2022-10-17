@@ -55,6 +55,7 @@ func (h *GetLogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Labels: map[string]string{
 			"pod":       req.PodSelector,
 			"namespace": req.Namespace,
+			"hlm_sh_revision":  req.Revision,
 		},
 		CustomSelectorSuffix: "event_store!=\"true\"",
 	}, lb, stopCh)

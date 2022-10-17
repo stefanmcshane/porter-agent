@@ -53,6 +53,7 @@ func (h *GetEventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Labels: map[string]string{
 			"pod":       req.PodSelector,
 			"namespace": req.Namespace,
+			"revision": req.Revision,
 		},
 		CustomSelectorSuffix: "event_store=\"true\"",
 	}, eb, stopCh)
