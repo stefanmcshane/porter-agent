@@ -167,12 +167,12 @@ func (store *LokiStore) GetPodLabelValues(options logstore.LabelPodValueOptions)
 			Start: timestamppb.New(options.Start),
 			End:   timestamppb.New(options.End),
 			Groups: []string{
-				fmt.Sprintf(`match[]={pod=~"%s.*"}`, options.Prefix),
+				fmt.Sprintf(`{pod=~"%s.*"}`, options.Prefix),
 			},
 		},
 	)
 
-	fmt.Println("query is", fmt.Sprintf(`match[]={pod=~"%s.*"}`, options.Prefix))
+	fmt.Println("query is", fmt.Sprintf(`{pod=~"%s.*"}`, options.Prefix))
 
 	// labelValues, err := store.querierClient.Label(ctx, &proto.LabelRequest{
 	// 	Name:   options.Label,
