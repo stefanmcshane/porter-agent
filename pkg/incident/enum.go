@@ -45,6 +45,10 @@ type EventMatch struct {
 	// loop, or simply a proximate cause. For example, an application which is continuously failing
 	// its liveness probe may be emitting critical "BackOff" events which are proximate causes.
 	IsPrimaryCause bool
+
+	// ShouldViewLogs refers to whether logs would be useful in order to debug this event. For events
+	// that require more application context (oom killed, non-zero exit code), logs could be helpful.
+	ShouldViewLogs bool
 }
 
 var EventEnum map[KubernetesVersion][]EventMatch
@@ -67,6 +71,7 @@ func init() {
 			fmt.Sprintf(`Container %s failed startup probe, will be restarted`, RFC1123Name),
 		),
 		IsPrimaryCause: true,
+		ShouldViewLogs: true,
 	})
 
 	eventMatch1_20 = append(eventMatch1_20, EventMatch{
@@ -78,6 +83,7 @@ func init() {
 			fmt.Sprintf(`Container %s failed liveness probe, will be restarted`, RFC1123Name),
 		),
 		IsPrimaryCause: true,
+		ShouldViewLogs: true,
 	})
 
 	eventMatch1_20 = append(eventMatch1_20, EventMatch{
@@ -89,6 +95,7 @@ func init() {
 		ReasonMatch:    "BackOff",
 		MessageMatch:   regexp.MustCompile("Back-off.*restarting failed container"),
 		IsPrimaryCause: false,
+		ShouldViewLogs: true,
 	})
 
 	eventMatch1_20 = append(eventMatch1_20, EventMatch{
@@ -111,6 +118,7 @@ func init() {
 		ReasonMatch:    "ApplicationError",
 		MessageMatch:   regexp.MustCompile("Back-off restarting failed container"),
 		IsPrimaryCause: true,
+		ShouldViewLogs: true,
 	})
 
 	eventMatch1_20 = append(eventMatch1_20, EventMatch{
@@ -122,6 +130,7 @@ func init() {
 		ReasonMatch:    "Error",
 		MessageMatch:   regexp.MustCompile(".*"),
 		IsPrimaryCause: true,
+		ShouldViewLogs: true,
 	})
 
 	eventMatch1_20 = append(eventMatch1_20, EventMatch{
@@ -131,6 +140,7 @@ func init() {
 		ReasonMatch:     "OOMKilled",
 		MessageMatch:    regexp.MustCompile(".*"),
 		IsPrimaryCause:  true,
+		ShouldViewLogs:  true,
 	})
 
 	eventMatch1_20 = append(eventMatch1_20, EventMatch{

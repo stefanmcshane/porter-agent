@@ -30,6 +30,8 @@ type Incident struct {
 	InvolvedObjectName      string
 	InvolvedObjectNamespace string
 
+	ShouldViewLogs bool
+
 	Severity types.SeverityType
 
 	Events []IncidentEvent
@@ -66,6 +68,7 @@ func (i *Incident) ToAPITypeMeta() *types.IncidentMeta {
 		LastSeen:                &lastSeen,
 		Summary:                 i.toExternalSummary(),
 		ShortSummary:            i.GetInternalSummary(),
+		ShouldViewLogs:          i.ShouldViewLogs,
 	}
 }
 

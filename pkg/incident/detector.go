@@ -95,7 +95,7 @@ func (d *IncidentDetector) DetectIncident(es []*event.FilteredEvent) error {
 	// iterate through incident events
 	for alertedEvent, match := range matches {
 		// construct the basic incident event model
-		incident := getIncidentMetaFromEvent(&alertedEvent)
+		incident := getIncidentMetaFromEvent(&alertedEvent, match)
 		incident.Events = matchesToIncidentEvent(d.KubeVersion, map[event.FilteredEvent]*EventMatch{
 			alertedEvent: match,
 		})

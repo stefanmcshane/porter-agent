@@ -73,7 +73,7 @@ func matchesToIncidentEvent(k8sVersion KubernetesVersion, es map[event.FilteredE
 	return res
 }
 
-func getIncidentMetaFromEvent(e *event.FilteredEvent) *models.Incident {
+func getIncidentMetaFromEvent(e *event.FilteredEvent, match *EventMatch) *models.Incident {
 	res := models.NewIncident()
 
 	res.IncidentStatus = types.IncidentStatusActive
@@ -82,6 +82,7 @@ func getIncidentMetaFromEvent(e *event.FilteredEvent) *models.Incident {
 	res.ReleaseNamespace = e.Owner.Namespace
 	res.ChartName = e.ChartName
 	res.Severity = types.SeverityType(e.Severity)
+	res.ShouldViewLogs = match.ShouldViewLogs
 
 	lastSeen := time.Now()
 
