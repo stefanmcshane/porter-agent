@@ -195,6 +195,8 @@ func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, 
 		ReleaseNamespace: &incident.ReleaseNamespace,
 	})
 
+	fmt.Printf("length of candidate matches for incident %s (%s) is %d\n", incident.UniqueID, incident.InvolvedObjectName, len(candidateMatches))
+
 	if err != nil {
 		return nil
 	}
@@ -208,8 +210,12 @@ func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, 
 		}
 	}
 
+	fmt.Println("primary cause summary is:", primaryCauseSummary)
+
 	for _, candidateMatch := range candidateMatches {
 		for _, candidateMatchEvent := range candidateMatch.Events {
+			fmt.Printf("checking candidate %s (%s) with summary %s\n", candidateMatch.UniqueID, candidateMatch.InvolvedObjectName, candidateMatchEvent.Summary)
+
 			if candidateMatchEvent.IsPrimaryCause && candidateMatchEvent.Summary == primaryCauseSummary {
 				// in this case, we've found a match, and we merge and return
 
