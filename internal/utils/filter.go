@@ -8,6 +8,10 @@ type ListIncidentsFilter struct {
 	ReleaseNamespace *string
 }
 
+type ListEventsFilter struct {
+	ReleaseName      *string
+	ReleaseNamespace *string
+}
 type ListIncidentEventsFilter struct {
 	IncidentID     *uint
 	PodName        *string

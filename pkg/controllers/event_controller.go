@@ -78,8 +78,8 @@ func (e *EventController) processAddEvent(obj interface{}) {
 }
 
 func (e *EventController) processUpdateEvent(oldObj, newObj interface{}) {
-	k8sEvent := newObj.(*v1.Event)
-	e.processEvent(k8sEvent)
+	// k8sEvent := newObj.(*v1.Event)
+	// e.processEvent(k8sEvent)
 }
 
 func (e *EventController) processEvent(k8sEvent *v1.Event) error {

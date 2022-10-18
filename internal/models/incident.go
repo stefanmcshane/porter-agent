@@ -14,6 +14,7 @@ type Incident struct {
 	gorm.Model
 
 	UniqueID string `gorm:"unique"`
+	EventID  uint
 
 	LastAlerted *time.Time
 	LastSeen    *time.Time
