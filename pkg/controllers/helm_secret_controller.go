@@ -30,9 +30,14 @@ type HelmSecretController struct {
 	KubeVersion incident.KubernetesVersion
 	Logger      *logger.Logger
 	Repository  *repository.Repository
+
+	startedAt *time.Time
 }
 
 func (h *HelmSecretController) Start() {
+	started := time.Now()
+	h.startedAt = &started
+
 	tweakListOptionsFunc := func(options *metav1.ListOptions) {
 		options.LabelSelector = "owner=helm"
 	}
@@ -84,15 +89,14 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 	if release != nil {
 		switch release.Info.Status {
 		case rspb.StatusDeployed:
-			h.Logger.Info().Caller().Msgf("helm release processed for deployed: %s", release.Name)
+			h.Logger.Info().Caller().Msgf("helm release processed for deployed: %s, deployed at %s, compared to %s", release.Name, release.Info.LastDeployed.Time, h.startedAt)
 
-			// if the deploy occurred in the past 10 seconds, just add it as an event for now
-			tenSecAgo := time.Now().Add(-10 * time.Second)
-
-			// TODO: use helm revision cache and check within the past hour
-
-			if release.Info.LastDeployed.Time.After(tenSecAgo) {
-				h.Logger.Info().Caller().Msgf("helm release %s deployed within last 10 seconds, storing event", release.Name)
+			// if release was deployed after the controller started time, we process it as a deployed event
+			if release.Info.LastDeployed.Time.After(*h.startedAt) {
+				// check against helm cache
+				if helmCaches, _ := h.Repository.HelmSecretCache.ListHelmSecretCachesForRevision(fmt.Sprintf("%d", release.Version), release.Name, release.Namespace); len(helmCaches) > 0 {
+					return
+				}
 
 				// create a new event
 				event := models.NewDeploymentStartedEventV1()
@@ -107,6 +111,15 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 					h.Logger.Error().Caller().Msgf("could not save new event: %s", err.Error())
 					return
 				}
+
+				// save to the helm cache
+				now := time.Now()
+				h.Repository.HelmSecretCache.CreateHelmSecretCache(&models.HelmSecretCache{
+					Name:      release.Name,
+					Namespace: release.Namespace,
+					Revision:  fmt.Sprintf("%d", release.Version),
+					Timestamp: &now,
+				})
 			}
 		case rspb.StatusPendingInstall:
 		case rspb.StatusPendingUpgrade:
