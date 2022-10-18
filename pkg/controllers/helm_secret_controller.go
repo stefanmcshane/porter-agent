@@ -76,6 +76,25 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 
 	h.Logger.Info().Caller().Msgf("processing helm secret: %s", secret.Name)
 
+	// check against helm cache immediately by parsing the secret data
+	revision := secret.Labels["version"]
+	name := secret.Labels["name"]
+	namespace := secret.Namespace
+
+	if helmCaches, _ := h.Repository.HelmSecretCache.ListHelmSecretCachesForRevision(revision, name, namespace); len(helmCaches) > 0 {
+		return
+	}
+
+	// save to the helm cache immediately
+	now := time.Now()
+
+	h.Repository.HelmSecretCache.CreateHelmSecretCache(&models.HelmSecretCache{
+		Name:      name,
+		Namespace: namespace,
+		Revision:  revision,
+		Timestamp: &now,
+	})
+
 	// in this case, we should case on the data that we receieved, but newly added secrets should
 	// generally be in an installing state
 	release, err := parseSecretToHelmRelease(*secret)
@@ -91,11 +110,6 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 		switch release.Info.Status {
 		case rspb.StatusDeployed:
 			h.Logger.Info().Caller().Msgf("helm release processed for deployed: %s, deployed at %s, compared to %s", release.Name, release.Info.LastDeployed.Time, h.startedAt)
-
-			// check against helm cache
-			if helmCaches, _ := h.Repository.HelmSecretCache.ListHelmSecretCachesForRevision(fmt.Sprintf("%d", release.Version), release.Name, release.Namespace); len(helmCaches) > 0 {
-				return
-			}
 
 			// create a new event
 			event := models.NewDeploymentFinishedEventV1()
@@ -125,15 +139,6 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 				return
 			}
 
-			// save to the helm cache
-			now := time.Now()
-
-			h.Repository.HelmSecretCache.CreateHelmSecretCache(&models.HelmSecretCache{
-				Name:      release.Name,
-				Namespace: release.Namespace,
-				Revision:  fmt.Sprintf("%d", release.Version),
-				Timestamp: &now,
-			})
 		case rspb.StatusPendingInstall:
 		case rspb.StatusPendingUpgrade:
 		case rspb.StatusPendingRollback:
