@@ -171,6 +171,8 @@ func main() {
 	r.Mount("/debug", middleware.Profiler())
 
 	r.Method("GET", "/incidents", incidentHandlers.NewListIncidentsHandler(conf))
+
+	r.Method("GET", "/incidents", incidentHandlers.NewListIncidentsHandler(conf))
 	r.Method("GET", "/incidents/{uid}", incidentHandlers.NewGetIncidentHandler(conf))
 	r.Method("GET", "/incidents/{uid}/events", incidentHandlers.NewListIncidentEventsHandler(conf))
 
@@ -178,7 +180,7 @@ func main() {
 	r.Method("GET", "/logs/pod_values", logHandlers.NewGetPodValuesHandler(conf))
 	r.Method("GET", "/logs/revision_values", logHandlers.NewGetRevisionValuesHandler(conf))
 
-	r.Method("GET", "/events", eventHandlers.NewGetEventHandler(conf))
+	r.Method("GET", "/events", eventHandlers.NewListEventsHandler(conf))
 
 	r.Method("GET", "/status", statusHandlers.NewGetStatusHandler(conf))
 

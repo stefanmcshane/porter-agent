@@ -1,6 +1,8 @@
 package incident
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"github.com/porter-dev/porter-agent/internal/utils"
 	"github.com/porter-dev/porter-agent/pkg/alerter"
 	"github.com/porter-dev/porter-agent/pkg/event"
+	"gorm.io/gorm"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -169,6 +172,12 @@ func (d *IncidentDetector) saveIncident(incident *models.Incident, ownerRef *eve
 			return err
 		}
 
+		err = d.saveEventFromIncident(incident)
+
+		if err != nil {
+			return err
+		}
+
 		return d.Alerter.HandleIncident(incident, triggeringPodName)
 	}
 
@@ -180,7 +189,61 @@ func (d *IncidentDetector) saveIncident(incident *models.Incident, ownerRef *eve
 		return err
 	}
 
+	err = d.saveEventFromIncident(incident)
+
+	if err != nil {
+		return err
+	}
+
 	return d.Alerter.HandleIncident(incident, triggeringPodName)
+}
+
+func (d *IncidentDetector) saveEventFromIncident(incident *models.Incident) error {
+	// query to see if event is already stored
+	var event *models.Event
+	var doesExist bool
+	var err error
+
+	incidentBytes, err := json.Marshal(incident.ToAPIType())
+
+	if err != nil {
+		return err
+	}
+
+	if incident.EventID != 0 {
+		event, err = d.Repository.Event.ReadEvent(incident.EventID)
+
+		if err != nil && !errors.Is(gorm.ErrRecordNotFound, err) {
+			return err
+		}
+
+		if event != nil {
+			doesExist = true
+		}
+	}
+
+	if !doesExist {
+		event = models.NewIncidentEventV1()
+	}
+
+	event.ReleaseName = incident.ReleaseName
+	event.ReleaseNamespace = incident.ReleaseNamespace
+	event.Timestamp = incident.LastSeen
+	event.Data = incidentBytes
+
+	if doesExist {
+		event, err = d.Repository.Event.UpdateEvent(event)
+	} else {
+		event, err = d.Repository.Event.CreateEvent(event)
+	}
+
+	if incident.EventID == 0 {
+		incident.EventID = event.ID
+
+		d.Repository.Incident.UpdateIncident(incident)
+	}
+
+	return err
 }
 
 func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, ownerRef *event.EventOwner) *models.Incident {

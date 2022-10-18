@@ -2,21 +2,32 @@ package types
 
 import "time"
 
-type GetEventRequest struct {
-	Limit       uint       `schema:"limit"`
-	StartRange  *time.Time `schema:"start_range"`
-	EndRange    *time.Time `schema:"end_range"`
-	Revision    string     `schema:"revision"`
-	PodSelector string     `schema:"pod_selector" form:"required"`
-	Namespace   string     `schema:"namespace" form:"required"`
+type EventType string
+
+const (
+	EventTypeIncident           EventType = "incident"
+	EventTypeIncidentResolved   EventType = "incident_resolved"
+	EventTypeDeploymentStarted  EventType = "deployment_started"
+	EventTypeDeploymentFinished EventType = "deployment_finished"
+	EventTypeDeploymentErrored  EventType = "deployment_errored"
+)
+
+type Event struct {
+	Type             EventType  `json:"type"`
+	Version          string     `json:"version"`
+	ReleaseName      string     `json:"release_name"`
+	ReleaseNamespace string     `json:"release_namespace"`
+	Timestamp        *time.Time `json:"timestamp"`
+	Data             []byte     `json:"data"`
 }
 
-type EventLine struct {
-	Timestamp *time.Time `json:"timestamp"`
-	Event     string     `json:"event"`
+type ListEventsRequest struct {
+	*PaginationRequest
+	ReleaseName      *string `json:"release_name"`
+	ReleaseNamespace *string `json:"release_namespace"`
 }
 
-type GetEventResponse struct {
-	ContinueTime *time.Time  `json:"continue_time"`
-	Events       []EventLine `json:"events"`
+type ListEventsResponse struct {
+	Events     []*Event            `json:"events" form:"required"`
+	Pagination *PaginationResponse `json:"pagination"`
 }

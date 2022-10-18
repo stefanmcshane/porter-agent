@@ -1,4 +1,4 @@
-package log
+package k8s_event
 
 import (
 	"net/http"
@@ -27,7 +27,7 @@ func NewGetEventHandler(config *config.Config) *GetEventHandler {
 }
 
 func (h *GetEventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	req := &types.GetEventRequest{}
+	req := &types.GetKubernetesEventRequest{}
 
 	if ok := h.decoderValidator.DecodeAndValidate(w, r, req); !ok {
 		return
@@ -62,7 +62,7 @@ func (h *GetEventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res := &types.GetEventResponse{
+	res := &types.GetKubernetesEventResponse{
 		Events:       eb.Events,
 		ContinueTime: eb.EarliestTimestamp,
 	}
@@ -71,16 +71,16 @@ func (h *GetEventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type eventBuffer struct {
-	Events            []types.EventLine
+	Events            []types.KubernetesEventLine
 	EarliestTimestamp *time.Time
 }
 
 func (l *eventBuffer) Write(timestamp *time.Time, event string) error {
 	if l.Events == nil {
-		l.Events = make([]types.EventLine, 0)
+		l.Events = make([]types.KubernetesEventLine, 0)
 	}
 
-	l.Events = append(l.Events, types.EventLine{
+	l.Events = append(l.Events, types.KubernetesEventLine{
 		Timestamp: timestamp,
 		Event:     event,
 	})

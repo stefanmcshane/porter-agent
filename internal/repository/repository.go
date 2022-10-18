@@ -7,6 +7,7 @@ type Repository struct {
 	Incident      *IncidentRepository
 	IncidentEvent *IncidentEventRepository
 	EventCache    *EventCacheRepository
+	Event         *EventRepository
 }
 
 func NewRepository(db *gorm.DB) *Repository {
@@ -15,5 +16,6 @@ func NewRepository(db *gorm.DB) *Repository {
 		Incident:      NewIncidentRepository(db),
 		IncidentEvent: NewIncidentEventRepository(db),
 		EventCache:    NewEventCacheRepository(db),
+		Event:         NewEventRepository(db),
 	}
 }

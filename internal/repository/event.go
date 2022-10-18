@@ -42,7 +42,7 @@ func (r *EventRepository) UpdateEvent(event *models.Event) (*models.Event, error
 }
 
 func (r *EventRepository) ListEvents(
-	filter *utils.ListIncidentsFilter,
+	filter *utils.ListEventsFilter,
 	opts ...utils.QueryOption,
 ) ([]*models.Event, *utils.PaginatedResult, error) {
 	var events []*models.Event
