@@ -256,6 +256,7 @@ func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, 
 		Status:           &statusActive,
 		ReleaseName:      &incident.ReleaseName,
 		ReleaseNamespace: &incident.ReleaseNamespace,
+		Revision:         &incident.Revision,
 	})
 
 	fmt.Printf("length of candidate matches for incident %s (%s) is %d\n", incident.UniqueID, incident.InvolvedObjectName, len(candidateMatches))

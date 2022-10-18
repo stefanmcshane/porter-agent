@@ -83,6 +83,7 @@ func getIncidentMetaFromEvent(e *event.FilteredEvent, match *EventMatch) *models
 	res.ChartName = e.ChartName
 	res.Severity = types.SeverityType(e.Severity)
 	res.ShouldViewLogs = match.ShouldViewLogs
+	res.Revision = e.Owner.Revision
 
 	lastSeen := time.Now()
 

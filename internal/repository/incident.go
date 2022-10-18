@@ -64,6 +64,10 @@ func (r *IncidentRepository) ListIncidents(
 		db = db.Where("release_namespace = ?", *filter.ReleaseNamespace)
 	}
 
+	if filter.Revision != nil {
+		db = db.Where("revision = ?", *filter.Revision)
+	}
+
 	paginatedResult := &utils.PaginatedResult{}
 
 	db = db.Scopes(utils.Paginate(opts, db, paginatedResult))

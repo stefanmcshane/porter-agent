@@ -33,6 +33,8 @@ type Incident struct {
 
 	ShouldViewLogs bool
 
+	Revision string
+
 	Severity types.SeverityType
 
 	Events []IncidentEvent
@@ -70,6 +72,7 @@ func (i *Incident) ToAPITypeMeta() *types.IncidentMeta {
 		Summary:                 i.toExternalSummary(),
 		ShortSummary:            i.GetInternalSummary(),
 		ShouldViewLogs:          i.ShouldViewLogs,
+		Revision:                i.Revision,
 	}
 }
 

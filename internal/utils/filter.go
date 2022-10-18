@@ -6,6 +6,7 @@ type ListIncidentsFilter struct {
 	Status           *types.IncidentStatus
 	ReleaseName      *string
 	ReleaseNamespace *string
+	Revision         *string
 }
 
 type ListEventsFilter struct {
