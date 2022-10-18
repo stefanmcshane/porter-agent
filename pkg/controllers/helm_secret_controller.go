@@ -67,6 +67,8 @@ func (h *HelmSecretController) Start() {
 func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 	secret := obj.(*v1.Secret)
 
+	h.Logger.Info().Caller().Msgf("processing helm secret: %s", secret.Name)
+
 	// in this case, we should case on the data that we receieved, but newly added secrets should
 	// generally be in an installing state
 	release, err := parseSecretToHelmRelease(*secret)
