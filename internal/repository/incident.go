@@ -26,7 +26,7 @@ func (r *IncidentRepository) CreateIncident(incident *models.Incident) (*models.
 func (r *IncidentRepository) ReadIncident(uid string) (*models.Incident, error) {
 	incident := &models.Incident{}
 
-	if err := r.db.Preload("Events", func(db *gorm.DB) *gorm.DB {
+	if err := r.db.Debug().Preload("Events", func(db *gorm.DB) *gorm.DB {
 		return db.Order("incident_events.last_seen DESC")
 	}).Where("unique_id = ?", uid).First(incident).Error; err != nil {
 		return nil, err
