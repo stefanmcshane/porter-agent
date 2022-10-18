@@ -92,49 +92,48 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 		case rspb.StatusDeployed:
 			h.Logger.Info().Caller().Msgf("helm release processed for deployed: %s, deployed at %s, compared to %s", release.Name, release.Info.LastDeployed.Time, h.startedAt)
 
-			// if release was deployed after the controller started time, we process it as a deployed event
-			if release.Info.LastDeployed.Time.After(*h.startedAt) {
-				// check against helm cache
-				if helmCaches, _ := h.Repository.HelmSecretCache.ListHelmSecretCachesForRevision(fmt.Sprintf("%d", release.Version), release.Name, release.Namespace); len(helmCaches) > 0 {
-					return
-				}
-
-				// create a new event
-				event := models.NewDeploymentFinishedEventV1()
-
-				now := time.Now()
-
-				event.Version = "v1"
-				event.ReleaseName = release.Name
-				event.ReleaseNamespace = release.Namespace
-				event.Timestamp = &now
-
-				eventData := helmReleaseToReleaseEventData(release)
-
-				eventDataBytes, err := json.Marshal(eventData)
-
-				if err != nil {
-					h.Logger.Error().Caller().Msgf("could not marshal event data to json: %s", err.Error())
-					return
-				}
-
-				event.Data = eventDataBytes
-
-				event, err = h.Repository.Event.CreateEvent(event)
-
-				if err != nil {
-					h.Logger.Error().Caller().Msgf("could not save new event: %s", err.Error())
-					return
-				}
-
-				// save to the helm cache
-				h.Repository.HelmSecretCache.CreateHelmSecretCache(&models.HelmSecretCache{
-					Name:      release.Name,
-					Namespace: release.Namespace,
-					Revision:  fmt.Sprintf("%d", release.Version),
-					Timestamp: &now,
-				})
+			// check against helm cache
+			if helmCaches, _ := h.Repository.HelmSecretCache.ListHelmSecretCachesForRevision(fmt.Sprintf("%d", release.Version), release.Name, release.Namespace); len(helmCaches) > 0 {
+				return
 			}
+
+			// create a new event
+			event := models.NewDeploymentFinishedEventV1()
+
+			ts := release.Info.LastDeployed.Time.UTC()
+
+			event.Version = "v1"
+			event.ReleaseName = release.Name
+			event.ReleaseNamespace = release.Namespace
+			event.Timestamp = &ts
+
+			eventData := helmReleaseToReleaseEventData(release)
+
+			eventDataBytes, err := json.Marshal(eventData)
+
+			if err != nil {
+				h.Logger.Error().Caller().Msgf("could not marshal event data to json: %s", err.Error())
+				return
+			}
+
+			event.Data = eventDataBytes
+
+			event, err = h.Repository.Event.CreateEvent(event)
+
+			if err != nil {
+				h.Logger.Error().Caller().Msgf("could not save new event: %s", err.Error())
+				return
+			}
+
+			// save to the helm cache
+			now := time.Now()
+
+			h.Repository.HelmSecretCache.CreateHelmSecretCache(&models.HelmSecretCache{
+				Name:      release.Name,
+				Namespace: release.Namespace,
+				Revision:  fmt.Sprintf("%d", release.Version),
+				Timestamp: &now,
+			})
 		case rspb.StatusPendingInstall:
 		case rspb.StatusPendingUpgrade:
 		case rspb.StatusPendingRollback:
