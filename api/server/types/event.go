@@ -23,8 +23,9 @@ type Event struct {
 
 type ListEventsRequest struct {
 	*PaginationRequest
-	ReleaseName      *string `json:"release_name"`
-	ReleaseNamespace *string `json:"release_namespace"`
+	ReleaseName      *string `schema:"release_name"`
+	ReleaseNamespace *string `schema:"release_namespace"`
+	Type             *string `schema:"type"`
 }
 
 type ListEventsResponse struct {

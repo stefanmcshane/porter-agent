@@ -49,6 +49,10 @@ func (r *EventRepository) ListEvents(
 
 	db := r.db.Model(&models.Event{})
 
+	if filter.Type != nil {
+		db = db.Where("type = ?", *filter.Type)
+	}
+
 	if filter.ReleaseName != nil {
 		db = db.Where("release_name = ?", *filter.ReleaseName)
 	}

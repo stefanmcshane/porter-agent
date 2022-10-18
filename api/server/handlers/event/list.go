@@ -37,6 +37,7 @@ func (h ListEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		&utils.ListEventsFilter{
 			ReleaseName:      req.ReleaseName,
 			ReleaseNamespace: req.ReleaseNamespace,
+			Type:             req.Type,
 		},
 		utils.WithSortBy("timestamp"),
 		utils.WithOrder(utils.OrderDesc),
