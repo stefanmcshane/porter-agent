@@ -112,6 +112,7 @@ func (e *EventController) processEvent(k8sEvent *v1.Event) error {
 			"pod":              k8sEvent.InvolvedObject.Name,
 			"namespace":        k8sEvent.InvolvedObject.Namespace,
 			"helm_sh_revision": revision,
+			"porter_pod_name":  fmt.Sprintf("%s_%s", k8sEvent.InvolvedObject.Name, revision),
 		}, serializedEvent, time.Now())
 
 		if err != nil {

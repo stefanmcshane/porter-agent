@@ -53,9 +53,8 @@ func (h *GetLogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		SearchParam: req.SearchParam,
 		Direction:   req.Direction,
 		Labels: map[string]string{
-			"pod":              req.PodSelector,
-			"namespace":        req.Namespace,
-			"helm_sh_revision": req.Revision,
+			"pod":       req.PodSelector,
+			"namespace": req.Namespace,
 		},
 		CustomSelectorSuffix: "event_store!=\"true\"",
 	}, lb, stopCh)

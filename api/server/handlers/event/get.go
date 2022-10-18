@@ -51,9 +51,8 @@ func (h *GetEventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		End:   *req.EndRange,
 		Limit: uint32(req.Limit),
 		Labels: map[string]string{
-			"pod":              req.PodSelector,
-			"namespace":        req.Namespace,
-			"helm_sh_revision": req.Revision,
+			"pod":       req.PodSelector,
+			"namespace": req.Namespace,
 		},
 		CustomSelectorSuffix: "event_store=\"true\"",
 	}, eb, stopCh)
