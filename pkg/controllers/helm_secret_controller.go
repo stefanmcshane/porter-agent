@@ -102,14 +102,12 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 				// create a new event
 				event := models.NewDeploymentFinishedEventV1()
 
-				// marshal to and from time format so we can guarantee correct format
-				timeString := release.Info.LastDeployed.Time.Format(time.RFC3339)
-				t, _ := time.Parse(time.RFC3339, timeString)
+				now := time.Now()
 
 				event.Version = "v1"
 				event.ReleaseName = release.Name
 				event.ReleaseNamespace = release.Namespace
-				event.Timestamp = &t
+				event.Timestamp = &now
 
 				eventData := helmReleaseToReleaseEventData(release)
 
@@ -130,7 +128,6 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 				}
 
 				// save to the helm cache
-				now := time.Now()
 				h.Repository.HelmSecretCache.CreateHelmSecretCache(&models.HelmSecretCache{
 					Name:      release.Name,
 					Namespace: release.Namespace,
