@@ -78,6 +78,8 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 		return
 	}
 
+	h.Logger.Info().Caller().Msgf("decoded helm secret to release %s with status %s", release.Name, release.Info.Status)
+
 	if release != nil {
 		switch release.Info.Status {
 		case rspb.StatusPendingInstall:
