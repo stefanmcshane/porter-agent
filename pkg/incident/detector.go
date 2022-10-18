@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -256,7 +257,6 @@ func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, 
 		Status:           &statusActive,
 		ReleaseName:      &incident.ReleaseName,
 		ReleaseNamespace: &incident.ReleaseNamespace,
-		Revision:         &incident.Revision,
 	})
 
 	fmt.Printf("length of candidate matches for incident %s (%s) is %d\n", incident.UniqueID, incident.InvolvedObjectName, len(candidateMatches))
@@ -286,6 +286,17 @@ func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, 
 				// take the greater of the last seen time
 				if incident.LastSeen.After(*candidateMatch.LastSeen) {
 					candidateMatch.LastSeen = incident.LastSeen
+				}
+
+				// if incident revision is greater than candidate revision, set candidate revision to incident revision
+				revisionInt, revisionErr := strconv.ParseInt(incident.Revision, 10, 64)
+
+				if revisionErr == nil {
+					cRevisionInt, cRevisionErr := strconv.ParseInt(incident.Revision, 10, 64)
+
+					if cRevisionErr != nil || revisionInt > cRevisionInt {
+						candidateMatch.Revision = incident.Revision
+					}
 				}
 
 				mergedEvents := mergeEvents(candidateMatch.Events, incident.Events)
