@@ -69,12 +69,19 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 
 	// in this case, we should case on the data that we receieved, but newly added secrets should
 	// generally be in an installing state
-	release, _ := parseSecretToHelmRelease(*secret)
+	release, err := parseSecretToHelmRelease(*secret)
+
+	if err != nil {
+		h.Logger.Error().Caller().Msgf("could not parse secret to helm release: %s", err.Error())
+		return
+	}
 
 	if release != nil {
 		switch release.Info.Status {
 		case rspb.StatusPendingInstall:
 		case rspb.StatusPendingUpgrade:
+			h.Logger.Info().Caller().Msgf("helm release processed for pending-upgrade: %s", release.Name)
+
 			// create a new event
 			event := models.NewDeploymentStartedEventV1()
 
@@ -82,9 +89,12 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 			event.ReleaseName = release.Name
 			event.ReleaseNamespace = release.Namespace
 
-			h.Repository.Event.CreateEvent(event)
+			event, err = h.Repository.Event.CreateEvent(event)
 
-			// todo: log event error
+			if err != nil {
+				h.Logger.Error().Caller().Msgf("could not save new event: %s", err.Error())
+				return
+			}
 		case rspb.StatusPendingRollback:
 		}
 	}
