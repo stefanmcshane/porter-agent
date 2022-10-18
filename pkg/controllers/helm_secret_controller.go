@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strings"
+	"time"
 
 	"github.com/porter-dev/porter-agent/internal/logger"
 	"github.com/porter-dev/porter-agent/internal/models"
@@ -82,6 +83,31 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 
 	if release != nil {
 		switch release.Info.Status {
+		case rspb.StatusDeployed:
+			h.Logger.Info().Caller().Msgf("helm release processed for deployed: %s", release.Name)
+
+			// if the deploy occurred in the past 10 seconds, just add it as an event for now
+			tenSecAgo := time.Now().Add(-10 * time.Second)
+
+			// TODO: use helm revision cache and check within the past hour
+
+			if release.Info.LastDeployed.Time.After(tenSecAgo) {
+				h.Logger.Info().Caller().Msgf("helm release %s deployed within last 10 seconds, storing event", release.Name)
+
+				// create a new event
+				event := models.NewDeploymentStartedEventV1()
+
+				event.Version = "v1"
+				event.ReleaseName = release.Name
+				event.ReleaseNamespace = release.Namespace
+
+				event, err = h.Repository.Event.CreateEvent(event)
+
+				if err != nil {
+					h.Logger.Error().Caller().Msgf("could not save new event: %s", err.Error())
+					return
+				}
+			}
 		case rspb.StatusPendingInstall:
 		case rspb.StatusPendingUpgrade:
 			h.Logger.Info().Caller().Msgf("helm release processed for pending-upgrade: %s", release.Name)
