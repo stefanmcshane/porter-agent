@@ -73,7 +73,19 @@ func (h *HelmSecretController) Start() {
 
 func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 	secret := obj.(*v1.Secret)
+	h.processHelmSecret(secret)
+}
 
+func (h *HelmSecretController) processUpdateHelmSecret(oldObj, newObj interface{}) {
+	secret := newObj.(*v1.Secret)
+	h.processHelmSecret(secret)
+}
+
+func (h *HelmSecretController) processDeleteHelmSecret(obj interface{}) {
+	// do nothing
+}
+
+func (h *HelmSecretController) processHelmSecret(secret *v1.Secret) {
 	h.Logger.Info().Caller().Msgf("processing helm secret: %s", secret.Name)
 
 	// check against helm cache immediately by parsing the secret data
@@ -84,16 +96,6 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 	if helmCaches, _ := h.Repository.HelmSecretCache.ListHelmSecretCachesForRevision(revision, name, namespace); len(helmCaches) > 0 {
 		return
 	}
-
-	// save to the helm cache immediately
-	now := time.Now()
-
-	h.Repository.HelmSecretCache.CreateHelmSecretCache(&models.HelmSecretCache{
-		Name:      name,
-		Namespace: namespace,
-		Revision:  revision,
-		Timestamp: &now,
-	})
 
 	// in this case, we should case on the data that we receieved, but newly added secrets should
 	// generally be in an installing state
@@ -109,6 +111,16 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 	if release != nil {
 		switch release.Info.Status {
 		case rspb.StatusDeployed:
+			// save to the helm cache immediately
+			now := time.Now()
+
+			h.Repository.HelmSecretCache.CreateHelmSecretCache(&models.HelmSecretCache{
+				Name:      name,
+				Namespace: namespace,
+				Revision:  revision,
+				Timestamp: &now,
+			})
+
 			h.Logger.Info().Caller().Msgf("helm release processed for deployed: %s, deployed at %s, compared to %s", release.Name, release.Info.LastDeployed.Time, h.startedAt)
 
 			// create a new event
@@ -144,16 +156,6 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 		case rspb.StatusPendingRollback:
 		}
 	}
-}
-
-func (h *HelmSecretController) processUpdateHelmSecret(oldObj, newObj interface{}) {
-	// secret := newObj.(*v1.Secret)
-
-	// capture "deployed" or "failed" helm states
-}
-
-func (h *HelmSecretController) processDeleteHelmSecret(obj interface{}) {
-	// do nothing
 }
 
 var magicGzip = []byte{0x1f, 0x8b, 0x08}
