@@ -13,12 +13,12 @@ const (
 )
 
 type Event struct {
-	Type             EventType  `json:"type"`
-	Version          string     `json:"version"`
-	ReleaseName      string     `json:"release_name"`
-	ReleaseNamespace string     `json:"release_namespace"`
-	Timestamp        *time.Time `json:"timestamp"`
-	Data             []byte     `json:"data"`
+	Type             EventType              `json:"type"`
+	Version          string                 `json:"version"`
+	ReleaseName      string                 `json:"release_name"`
+	ReleaseNamespace string                 `json:"release_namespace"`
+	Timestamp        *time.Time             `json:"timestamp"`
+	Data             map[string]interface{} `json:"data"`
 }
 
 type ListEventsRequest struct {

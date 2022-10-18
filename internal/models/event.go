@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/porter-dev/porter-agent/api/server/types"
@@ -42,12 +43,16 @@ func NewDeploymentFinishedEventV1() *Event {
 }
 
 func (e *Event) ToAPIType() *types.Event {
+	eventData := make(map[string]interface{})
+
+	json.Unmarshal(e.Data, &eventData)
+
 	return &types.Event{
 		Version:          e.Version,
 		Type:             e.Type,
 		ReleaseName:      e.ReleaseName,
 		ReleaseNamespace: e.ReleaseNamespace,
 		Timestamp:        e.Timestamp,
-		Data:             e.Data,
+		Data:             eventData,
 	}
 }
