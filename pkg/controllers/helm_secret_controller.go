@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
+	"helm.sh/helm/v3/pkg/chart"
 	rspb "helm.sh/helm/v3/pkg/release"
 )
 
@@ -99,11 +100,23 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 				}
 
 				// create a new event
-				event := models.NewDeploymentStartedEventV1()
+				event := models.NewDeploymentFinishedEventV1()
 
 				event.Version = "v1"
 				event.ReleaseName = release.Name
 				event.ReleaseNamespace = release.Namespace
+				event.Timestamp = &release.Info.LastDeployed.Time
+
+				eventData := helmReleaseToReleaseEventData(release)
+
+				eventDataBytes, err := json.Marshal(eventData)
+
+				if err != nil {
+					h.Logger.Error().Caller().Msgf("could not marshal event data to json: %s", err.Error())
+					return
+				}
+
+				event.Data = eventDataBytes
 
 				event, err = h.Repository.Event.CreateEvent(event)
 
@@ -123,21 +136,6 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 			}
 		case rspb.StatusPendingInstall:
 		case rspb.StatusPendingUpgrade:
-			h.Logger.Info().Caller().Msgf("helm release processed for pending-upgrade: %s", release.Name)
-
-			// create a new event
-			event := models.NewDeploymentStartedEventV1()
-
-			event.Version = "v1"
-			event.ReleaseName = release.Name
-			event.ReleaseNamespace = release.Namespace
-
-			event, err = h.Repository.Event.CreateEvent(event)
-
-			if err != nil {
-				h.Logger.Error().Caller().Msgf("could not save new event: %s", err.Error())
-				return
-			}
 		case rspb.StatusPendingRollback:
 		}
 	}
@@ -205,4 +203,29 @@ func decodeRelease(data string) (*rspb.Release, error) {
 		return nil, err
 	}
 	return &rls, nil
+}
+
+type ReleaseEventData struct {
+	Name      string `json:"name,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+	Revision  string `json:"revision,omitempty"`
+
+	Info  *rspb.Info             `json:"info,omitempty"`
+	Chart *ReleaseEventDataChart `json:"chart,omitempty"`
+}
+
+type ReleaseEventDataChart struct {
+	Metadata *chart.Metadata `json:"metadata"`
+}
+
+func helmReleaseToReleaseEventData(rel *rspb.Release) *ReleaseEventData {
+	return &ReleaseEventData{
+		Name:      rel.Name,
+		Namespace: rel.Namespace,
+		Revision:  fmt.Sprintf("%d", rel.Version),
+		Info:      rel.Info,
+		Chart: &ReleaseEventDataChart{
+			Metadata: rel.Chart.Metadata,
+		},
+	}
 }

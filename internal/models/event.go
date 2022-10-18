@@ -31,12 +31,12 @@ func NewIncidentEventV1() *Event {
 	}
 }
 
-func NewDeploymentStartedEventV1() *Event {
+func NewDeploymentFinishedEventV1() *Event {
 	randStr, _ := GenerateRandomBytes(16)
 
 	return &Event{
 		UniqueID: randStr,
-		Type:     types.EventTypeDeploymentStarted,
+		Type:     types.EventTypeDeploymentFinished,
 		Version:  "v1",
 	}
 }
