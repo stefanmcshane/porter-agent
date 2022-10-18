@@ -102,10 +102,14 @@ func (h *HelmSecretController) processAddHelmSecret(obj interface{}) {
 				// create a new event
 				event := models.NewDeploymentFinishedEventV1()
 
+				// marshal to and from time format so we can guarantee correct format
+				timeString := release.Info.LastDeployed.Time.Format(time.RFC3339)
+				t, _ := time.Parse(time.RFC3339, timeString)
+
 				event.Version = "v1"
 				event.ReleaseName = release.Name
 				event.ReleaseNamespace = release.Namespace
-				event.Timestamp = &release.Info.LastDeployed.Time
+				event.Timestamp = &t
 
 				eventData := helmReleaseToReleaseEventData(release)
 
