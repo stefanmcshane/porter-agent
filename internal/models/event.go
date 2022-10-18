@@ -31,6 +31,16 @@ func NewIncidentEventV1() *Event {
 	}
 }
 
+func NewDeploymentStartedEventV1() *Event {
+	randStr, _ := GenerateRandomBytes(16)
+
+	return &Event{
+		UniqueID: randStr,
+		Type:     types.EventTypeDeploymentStarted,
+		Version:  "v1",
+	}
+}
+
 func (e *Event) ToAPIType() *types.Event {
 	return &types.Event{
 		Version:          e.Version,

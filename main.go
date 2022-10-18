@@ -156,6 +156,16 @@ func main() {
 
 	go podController.Start()
 
+	helmSecretController := controllers.HelmSecretController{
+		KubeClient: kubeClient,
+		// TODO: don't hardcode to 1.20
+		KubeVersion: incident.KubernetesVersion_1_20,
+		Logger:      l,
+		Repository:  repo,
+	}
+
+	go helmSecretController.Start()
+
 	conf, err := config.GetConfig(&envDecoderConf, repo, logStore)
 
 	if err != nil {
