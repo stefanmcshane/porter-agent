@@ -64,7 +64,7 @@ func (h *ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 			PodNamespace: req.PodNamespace,
 			Summary:      req.Summary,
 		},
-		utils.WithSortBy("updated_at"),
+		utils.WithSortBy("last_seen"),
 		utils.WithOrder(utils.OrderDesc),
 		utils.WithLimit(50),
 		utils.WithOffset(req.Page*50),
