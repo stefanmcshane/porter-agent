@@ -87,7 +87,7 @@ type ListIncidentEventsRequest struct {
 	PodName      *string `schema:"pod_name"`
 	PodNamespace *string `schema:"pod_namespace"`
 	Summary      *string `schema:"summary"`
-	PodPrefix    *string `json:"pod_prefix"`
+	PodPrefix    *string `schema:"pod_prefix"`
 }
 
 type ListIncidentEventsResponse struct {
