@@ -36,6 +36,16 @@ func (j *JobEventProducer) ParseFilteredEvents(es []*event.FilteredEvent) error 
 			continue
 		}
 
+		// place the event in the cache as soon as possible
+		now := time.Now()
+
+		j.Repository.JobCache.CreateJobCache(&models.JobCache{
+			PodName:      e.PodName,
+			PodNamespace: e.PodNamespace,
+			Reason:       e.KubernetesReason,
+			Timestamp:    &now,
+		})
+
 		// populate the event
 		err := e.Populate(j.KubeClient)
 
@@ -80,16 +90,6 @@ func (j *JobEventProducer) ParseFilteredEvents(es []*event.FilteredEvent) error 
 				return err
 			}
 		}
-
-		// add the event to the cache
-		now := time.Now()
-
-		j.Repository.JobCache.CreateJobCache(&models.JobCache{
-			PodName:      e.PodName,
-			PodNamespace: e.PodNamespace,
-			Reason:       e.KubernetesReason,
-			Timestamp:    &now,
-		})
 	}
 
 	return nil
