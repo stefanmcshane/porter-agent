@@ -149,6 +149,7 @@ func main() {
 		Repository:       repo,
 		LogStore:         logStore,
 		Logger:           l,
+		JobProducer:      jobProducer,
 	}
 
 	go eventController.Start()

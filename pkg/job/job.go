@@ -26,6 +26,11 @@ func (j *JobEventProducer) ParseFilteredEvents(es []*event.FilteredEvent) error 
 			continue
 		}
 
+		// we only look at a subset of kubernetes reasons
+		if r := e.KubernetesReason; r != "Completed" && r != "Running" {
+			continue
+		}
+
 		// de-duplicate the event
 		if cacheHits, err := j.Repository.JobCache.ListJobCaches(e.PodName, e.PodNamespace, e.KubernetesReason); err == nil && len(cacheHits) > 0 {
 			continue
@@ -41,18 +46,19 @@ func (j *JobEventProducer) ParseFilteredEvents(es []*event.FilteredEvent) error 
 		// only parse events with a job owner - this is checked in the events but we check this here as well
 		if strings.ToLower(e.Owner.Kind) == "job" {
 			// case on the reason and store the events
-			var event *models.Event
+			var porterEvent *models.Event
+
 			switch e.KubernetesReason {
 			case "Running":
-				event = models.NewJobStartedEventV1()
+				porterEvent = models.NewJobStartedEventV1()
 			case "Completed":
-				event = models.NewJobFinishedEventV1()
+				porterEvent = models.NewJobFinishedEventV1()
 			}
 
-			event.ReleaseName = e.ReleaseName
-			event.ReleaseNamespace = e.PodNamespace
-			event.Timestamp = e.Timestamp
-			event.AdditionalQueryMeta = fmt.Sprintf("job/%s", e.Owner.Name)
+			porterEvent.ReleaseName = e.ReleaseName
+			porterEvent.ReleaseNamespace = e.PodNamespace
+			porterEvent.Timestamp = e.Timestamp
+			porterEvent.AdditionalQueryMeta = fmt.Sprintf("job/%s", e.Owner.Name)
 
 			eventData, err := json.Marshal(e.Pod)
 
@@ -60,9 +66,9 @@ func (j *JobEventProducer) ParseFilteredEvents(es []*event.FilteredEvent) error 
 				return err
 			}
 
-			event.Data = eventData
+			porterEvent.Data = eventData
 
-			event, err = j.Repository.Event.CreateEvent(event)
+			porterEvent, err = j.Repository.Event.CreateEvent(porterEvent)
 
 			if err != nil {
 				j.Logger.Error().Caller().Msgf("could not save new event: %s", err.Error())

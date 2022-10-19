@@ -12,6 +12,7 @@ import (
 	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/pkg/event"
 	"github.com/porter-dev/porter-agent/pkg/incident"
+	"github.com/porter-dev/porter-agent/pkg/job"
 	"github.com/porter-dev/porter-agent/pkg/logstore"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,6 +29,7 @@ type EventController struct {
 	KubeVersion      incident.KubernetesVersion
 	EventStore       event.EventStore
 	IncidentDetector *incident.IncidentDetector
+	JobProducer      *job.JobEventProducer
 
 	Repository *repository.Repository
 	LogStore   logstore.LogStore
@@ -128,13 +130,27 @@ func (e *EventController) processEvent(k8sEvent *v1.Event) error {
 
 		es := []*event.FilteredEvent{filteredEvent}
 
+		errs := make([]error, 0)
+
 		// trigger incident detection loop
 		err := e.IncidentDetector.DetectIncident(es)
 
 		if err != nil {
 			e.Logger.Error().Caller().Msgf("encountered error while running incident detection: %v", err)
-			return e.updateEventCache(k8sEvent, revision, err)
+			errs = append(errs, err)
 		}
+
+		err = e.JobProducer.ParseFilteredEvents(es)
+
+		if err != nil {
+			errs = append(errs, err)
+		}
+
+		if len(errs) > 0 {
+			return fmt.Errorf("%v", errs)
+		}
+
+		return nil
 	}
 
 	return e.updateEventCache(k8sEvent, revision, nil)

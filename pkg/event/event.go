@@ -229,6 +229,18 @@ func NewFilteredEventFromK8sEvent(k8sEvent *v1.Event) *FilteredEvent {
 		severity = EventSeverityHigh
 	}
 
+	if k8sEvent.Reason == "Created" && strings.Contains(k8sEvent.Message, "Created container job") {
+		return &FilteredEvent{
+			Source:            K8sEvent,
+			PodName:           k8sEvent.InvolvedObject.Name,
+			PodNamespace:      k8sEvent.InvolvedObject.Namespace,
+			KubernetesReason:  "Running",
+			KubernetesMessage: k8sEvent.Message,
+			Severity:          EventSeverityLow,
+			Timestamp:         &k8sEvent.LastTimestamp.Time,
+		}
+	}
+
 	return &FilteredEvent{
 		Source:            K8sEvent,
 		PodName:           k8sEvent.InvolvedObject.Name,
@@ -317,16 +329,14 @@ func NewFilteredEventsFromPod(pod *v1.Pod) []*FilteredEvent {
 				}
 
 				if termState := containerStatus.State.Terminated; termState != nil {
-					if termState.Reason == "Completed" {
-						res = append(res, &FilteredEvent{
-							Source:           Pod,
-							PodName:          pod.Name,
-							PodNamespace:     pod.Namespace,
-							KubernetesReason: "Completed",
-							Severity:         EventSeverityLow,
-							Timestamp:        &termState.FinishedAt.Time,
-						})
-					}
+					res = append(res, &FilteredEvent{
+						Source:           Pod,
+						PodName:          pod.Name,
+						PodNamespace:     pod.Namespace,
+						KubernetesReason: "Completed",
+						Severity:         EventSeverityLow,
+						Timestamp:        &termState.FinishedAt.Time,
+					})
 				}
 			}
 		}
