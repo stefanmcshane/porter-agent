@@ -40,6 +40,7 @@ func (h *ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		PodName:      req.PodName,
 		PodNamespace: req.PodNamespace,
 		Summary:      req.Summary,
+		PodPrefix:    req.PodPrefix,
 	}
 
 	if req.IncidentID != nil {

@@ -19,5 +19,6 @@ type ListIncidentEventsFilter struct {
 	PodName        *string
 	PodNamespace   *string
 	Summary        *string
+	PodPrefix      *string
 	IsPrimaryCause *bool
 }

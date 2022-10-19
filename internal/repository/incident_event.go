@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"fmt"
+
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter-agent/internal/utils"
 	"gorm.io/gorm"
@@ -59,6 +61,14 @@ func (r *IncidentEventRepository) ListEvents(
 
 	if filter.IsPrimaryCause != nil {
 		db = db.Where("is_primary_cause = ?", *filter.IsPrimaryCause)
+	}
+
+	if filter.PodPrefix != nil {
+		if filter.PodName != nil {
+			return nil, nil, fmt.Errorf("cannot set both pod_name and pod_prefix")
+		}
+
+		db = db.Where("pod_name LIKE ?", *filter.PodPrefix+"%")
 	}
 
 	paginatedResult := &utils.PaginatedResult{}
