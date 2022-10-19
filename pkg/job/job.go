@@ -82,8 +82,8 @@ func (j *JobEventProducer) ParseFilteredEvents(es []*event.FilteredEvent) error 
 
 			porterEvent.Data = eventDataBytes
 
-			// check cache hits again in case this has been added since checking it above
-			if j.isInCache(e) {
+			// check that the cache hit length is equal to 1
+			if cacheHits, err := j.Repository.JobCache.ListJobCaches(e.PodName, e.PodNamespace, e.KubernetesReason); err == nil && len(cacheHits) != 1 {
 				continue
 			}
 
