@@ -10,6 +10,8 @@ import (
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter-agent/internal/repository"
 	"github.com/porter-dev/porter-agent/pkg/event"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -70,13 +72,15 @@ func (j *JobEventProducer) ParseFilteredEvents(es []*event.FilteredEvent) error 
 			porterEvent.Timestamp = e.Timestamp
 			porterEvent.AdditionalQueryMeta = fmt.Sprintf("job/%s", e.Owner.Name)
 
-			eventData, err := json.Marshal(e.Pod)
+			jobEventData := podToJobEventData(e.Pod)
+
+			eventDataBytes, err := json.Marshal(jobEventData)
 
 			if err != nil {
 				return err
 			}
 
-			porterEvent.Data = eventData
+			porterEvent.Data = eventDataBytes
 
 			// check cache hits again in case this has been added since checking it above
 			if j.isInCache(e) {
@@ -102,4 +106,18 @@ func (j *JobEventProducer) isInCache(e *event.FilteredEvent) bool {
 	}
 
 	return false
+}
+
+// We strip out the spec of the pod which could include sensitive information, retaining only
+// the metadata and the status
+type JobEventData struct {
+	Meta   *metav1.ObjectMeta `json:"metadata"`
+	Status *v1.PodStatus      `json:"status"`
+}
+
+func podToJobEventData(pod *v1.Pod) *JobEventData {
+	return &JobEventData{
+		Meta:   &pod.ObjectMeta,
+		Status: &pod.Status,
+	}
 }
