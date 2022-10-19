@@ -30,6 +30,7 @@ import (
 	"github.com/porter-dev/porter-agent/pkg/controllers"
 	"github.com/porter-dev/porter-agent/pkg/httpclient"
 	"github.com/porter-dev/porter-agent/pkg/incident"
+	"github.com/porter-dev/porter-agent/pkg/job"
 	"github.com/porter-dev/porter-agent/pkg/logstore"
 	"github.com/porter-dev/porter-agent/pkg/logstore/lokistore"
 	"github.com/porter-dev/porter-agent/pkg/logstore/memorystore"
@@ -121,6 +122,12 @@ func main() {
 		Logger:      l,
 	}
 
+	jobProducer := &job.JobEventProducer{
+		KubeClient: *kubeClient,
+		Repository: repo,
+		Logger:     l,
+	}
+
 	// trigger resolver through pulsar
 	go func() {
 		p := pulsar.NewPulsar(1, time.Minute) // pulse every 1 minute
@@ -152,6 +159,7 @@ func main() {
 		KubeVersion:      incident.KubernetesVersion_1_20,
 		IncidentDetector: detector,
 		Logger:           l,
+		JobProducer:      jobProducer,
 	}
 
 	go podController.Start()
