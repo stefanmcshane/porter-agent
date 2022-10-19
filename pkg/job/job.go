@@ -32,7 +32,7 @@ func (j *JobEventProducer) ParseFilteredEvents(es []*event.FilteredEvent) error 
 		}
 
 		// de-duplicate the event
-		if cacheHits, err := j.Repository.JobCache.ListJobCaches(e.PodName, e.PodNamespace, e.KubernetesReason); err == nil && len(cacheHits) > 0 {
+		if j.isInCache(e) {
 			continue
 		}
 
@@ -68,6 +68,11 @@ func (j *JobEventProducer) ParseFilteredEvents(es []*event.FilteredEvent) error 
 
 			porterEvent.Data = eventData
 
+			// check cache hits again in case this has been added since checking it above
+			if j.isInCache(e) {
+				continue
+			}
+
 			porterEvent, err = j.Repository.Event.CreateEvent(porterEvent)
 
 			if err != nil {
@@ -89,4 +94,12 @@ func (j *JobEventProducer) ParseFilteredEvents(es []*event.FilteredEvent) error 
 
 	return nil
 
+}
+
+func (j *JobEventProducer) isInCache(e *event.FilteredEvent) bool {
+	if cacheHits, err := j.Repository.JobCache.ListJobCaches(e.PodName, e.PodNamespace, e.KubernetesReason); err == nil && len(cacheHits) > 0 {
+		return true
+	}
+
+	return false
 }
