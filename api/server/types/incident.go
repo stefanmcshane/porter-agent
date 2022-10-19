@@ -83,6 +83,7 @@ type IncidentEvent struct {
 
 type ListIncidentEventsRequest struct {
 	*PaginationRequest
+	IncidentID   *string `schema:"incident_id"`
 	PodName      *string `schema:"pod_name"`
 	PodNamespace *string `schema:"pod_namespace"`
 	Summary      *string `schema:"summary"`

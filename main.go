@@ -184,7 +184,7 @@ func main() {
 
 	r.Method("GET", "/incidents", incidentHandlers.NewListIncidentsHandler(conf))
 	r.Method("GET", "/incidents/{uid}", incidentHandlers.NewGetIncidentHandler(conf))
-	r.Method("GET", "/incidents/{uid}/events", incidentHandlers.NewListIncidentEventsHandler(conf))
+	r.Method("GET", "/incidents/events", incidentHandlers.NewListIncidentEventsHandler(conf))
 
 	r.Method("GET", "/logs", logHandlers.NewGetLogHandler(conf))
 	r.Method("GET", "/logs/pod_values", logHandlers.NewGetPodValuesHandler(conf))

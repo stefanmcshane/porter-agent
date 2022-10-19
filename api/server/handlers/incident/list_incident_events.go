@@ -10,7 +10,6 @@ import (
 	"github.com/porter-dev/porter-agent/internal/utils"
 	"github.com/porter-dev/porter/api/server/shared"
 	"github.com/porter-dev/porter/api/server/shared/apierrors"
-	"github.com/porter-dev/porter/api/server/shared/requestutils"
 	"gorm.io/gorm"
 )
 
@@ -29,13 +28,6 @@ func NewListIncidentEventsHandler(config *config.Config) *ListIncidentEventsHand
 }
 
 func (h *ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	incidentUID, reqErr := requestutils.GetURLParamString(r, "uid")
-
-	if reqErr != nil {
-		apierrors.HandleAPIError(h.config.Logger, h.config.Alerter, w, r, reqErr, true)
-		return
-	}
-
 	req := &types.ListIncidentEventsRequest{
 		PaginationRequest: &types.PaginationRequest{},
 	}
@@ -44,26 +36,31 @@ func (h *ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	incident, err := h.config.Repository.Incident.ReadIncident(incidentUID)
+	filter := &utils.ListIncidentEventsFilter{
+		PodName:      req.PodName,
+		PodNamespace: req.PodNamespace,
+		Summary:      req.Summary,
+	}
 
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			apierrors.HandleAPIError(h.config.Logger, h.config.Alerter, w, r,
-				apierrors.NewErrNotFound(fmt.Errorf("no such incident exists")), true)
+	if req.IncidentID != nil {
+		incident, err := h.config.Repository.Incident.ReadIncident(*req.IncidentID)
+
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				apierrors.HandleAPIError(h.config.Logger, h.config.Alerter, w, r,
+					apierrors.NewErrNotFound(fmt.Errorf("no such incident exists")), true)
+				return
+			}
+
+			apierrors.HandleAPIError(h.config.Logger, h.config.Alerter, w, r, apierrors.NewErrInternal(err), true)
 			return
 		}
 
-		apierrors.HandleAPIError(h.config.Logger, h.config.Alerter, w, r, apierrors.NewErrInternal(err), true)
-		return
+		filter.IncidentID = &incident.ID
 	}
 
 	events, paginatedResult, err := h.config.Repository.IncidentEvent.ListEvents(
-		&utils.ListIncidentEventsFilter{
-			IncidentID:   &incident.ID,
-			PodName:      req.PodName,
-			PodNamespace: req.PodNamespace,
-			Summary:      req.Summary,
-		},
+		filter,
 		utils.WithSortBy("last_seen"),
 		utils.WithOrder(utils.OrderDesc),
 		utils.WithLimit(50),
