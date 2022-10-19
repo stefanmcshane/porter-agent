@@ -42,6 +42,26 @@ func NewDeploymentFinishedEventV1() *Event {
 	}
 }
 
+func NewJobStartedEventV1() *Event {
+	randStr, _ := GenerateRandomBytes(16)
+
+	return &Event{
+		UniqueID: randStr,
+		Type:     types.EventTypeJobStarted,
+		Version:  "v1",
+	}
+}
+
+func NewJobFinishedEventV1() *Event {
+	randStr, _ := GenerateRandomBytes(16)
+
+	return &Event{
+		UniqueID: randStr,
+		Type:     types.EventTypeJobFinished,
+		Version:  "v1",
+	}
+}
+
 func (e *Event) ToAPIType() *types.Event {
 	eventData := make(map[string]interface{})
 

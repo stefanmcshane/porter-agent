@@ -28,9 +28,10 @@ type EventController struct {
 	KubeVersion      incident.KubernetesVersion
 	EventStore       event.EventStore
 	IncidentDetector *incident.IncidentDetector
-	Repository       *repository.Repository
-	LogStore         logstore.LogStore
-	Logger           *logger.Logger
+
+	Repository *repository.Repository
+	LogStore   logstore.LogStore
+	Logger     *logger.Logger
 }
 
 type AuthError struct{}

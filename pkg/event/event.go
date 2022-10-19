@@ -299,6 +299,39 @@ func NewFilteredEventsFromPod(pod *v1.Pod) []*FilteredEvent {
 		}
 	}
 
+	// if the pod is owned by a job, we add low-severity filtered events to indicate when the job has started and
+	// completed. These events will be de-duplicated by the caller.
+	if len(pod.ObjectMeta.OwnerReferences) > 0 && pod.ObjectMeta.OwnerReferences[0].Kind == "Job" {
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			// we look explicitly for the `job` container
+			if containerStatus.Name == "job" {
+				if runningState := containerStatus.State.Running; runningState != nil {
+					res = append(res, &FilteredEvent{
+						Source:           Pod,
+						PodName:          pod.Name,
+						PodNamespace:     pod.Namespace,
+						KubernetesReason: "Running",
+						Severity:         EventSeverityLow,
+						Timestamp:        &runningState.StartedAt.Time,
+					})
+				}
+
+				if termState := containerStatus.State.Terminated; termState != nil {
+					if termState.Reason == "Completed" {
+						res = append(res, &FilteredEvent{
+							Source:           Pod,
+							PodName:          pod.Name,
+							PodNamespace:     pod.Namespace,
+							KubernetesReason: "Completed",
+							Severity:         EventSeverityLow,
+							Timestamp:        &termState.FinishedAt.Time,
+						})
+					}
+				}
+			}
+		}
+	}
+
 	return res
 }
 

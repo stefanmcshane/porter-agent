@@ -10,6 +10,8 @@ const (
 	EventTypeDeploymentStarted  EventType = "deployment_started"
 	EventTypeDeploymentFinished EventType = "deployment_finished"
 	EventTypeDeploymentErrored  EventType = "deployment_errored"
+	EventTypeJobStarted         EventType = "job_started"
+	EventTypeJobFinished        EventType = "job_finished"
 )
 
 type Event struct {
