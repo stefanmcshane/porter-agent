@@ -10,9 +10,10 @@ type ListIncidentsFilter struct {
 }
 
 type ListEventsFilter struct {
-	ReleaseName      *string
-	ReleaseNamespace *string
-	Type             *string
+	ReleaseName         *string
+	ReleaseNamespace    *string
+	Type                *string
+	AdditionalQueryMeta *string
 }
 type ListIncidentEventsFilter struct {
 	IncidentID     *uint

@@ -34,3 +34,11 @@ type ListEventsResponse struct {
 	Events     []*Event            `json:"events" form:"required"`
 	Pagination *PaginationResponse `json:"pagination"`
 }
+
+type ListJobEventsRequest struct {
+	*PaginationRequest
+	ReleaseName      *string `schema:"release_name"`
+	ReleaseNamespace *string `schema:"release_namespace"`
+	Type             *string `schema:"type"`
+	JobName          string  `schema:"job_name" form:"required"`
+}

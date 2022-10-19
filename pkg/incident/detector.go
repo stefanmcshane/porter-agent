@@ -232,6 +232,10 @@ func (d *IncidentDetector) saveEventFromIncident(incident *models.Incident) erro
 	event.Timestamp = incident.LastSeen
 	event.Data = incidentBytes
 
+	if strings.ToLower(string(incident.InvolvedObjectKind)) == "job" {
+		event.AdditionalQueryMeta = fmt.Sprintf("job/%s", incident.InvolvedObjectName)
+	}
+
 	if doesExist {
 		event, err = d.Repository.Event.UpdateEvent(event)
 	} else {

@@ -191,6 +191,7 @@ func main() {
 	r.Method("GET", "/logs/revision_values", logHandlers.NewGetRevisionValuesHandler(conf))
 
 	r.Method("GET", "/events", eventHandlers.NewListEventsHandler(conf))
+	r.Method("GET", "/events/job", eventHandlers.NewListJobEventsHandler(conf))
 
 	r.Method("GET", "/status", statusHandlers.NewGetStatusHandler(conf))
 

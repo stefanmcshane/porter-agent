@@ -1,6 +1,8 @@
 package job
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -50,6 +52,15 @@ func (j *JobEventProducer) ParseFilteredEvents(es []*event.FilteredEvent) error 
 			event.ReleaseName = e.ReleaseName
 			event.ReleaseNamespace = e.PodNamespace
 			event.Timestamp = e.Timestamp
+			event.AdditionalQueryMeta = fmt.Sprintf("job/%s", e.Owner.Name)
+
+			eventData, err := json.Marshal(e.Pod)
+
+			if err != nil {
+				return err
+			}
+
+			event.Data = eventData
 
 			event, err = j.Repository.Event.CreateEvent(event)
 

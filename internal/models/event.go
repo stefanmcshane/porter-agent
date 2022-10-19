@@ -19,6 +19,8 @@ type Event struct {
 	ReleaseNamespace string
 	Timestamp        *time.Time
 
+	AdditionalQueryMeta string
+
 	Data []byte
 }
 
