@@ -56,7 +56,7 @@ func (h *GetLogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"pod":       req.PodSelector,
 			"namespace": req.Namespace,
 		},
-		CustomSelectorSuffix: "event_store!=\"true\"",
+		CustomSelectorSuffix: "event_store!=\"true\",container!=\"sidecar\"",
 	}, lb, stopCh)
 
 	if err != nil {

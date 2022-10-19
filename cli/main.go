@@ -114,7 +114,7 @@ func main() {
 		Start:                startTime,
 		SearchParam:          searchParam,
 		Limit:                limit,
-		CustomSelectorSuffix: "event_store!=\"true\"",
+		CustomSelectorSuffix: "event_store!=\"true\",container!=\"sidecar\"",
 	}, w, stopChan); err != nil {
 		l.Fatal().Caller().Msgf("could not tail logs: %v", err)
 	}
