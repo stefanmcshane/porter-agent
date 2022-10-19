@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  # setup porter user with API access
+  accounts.porter: apiKey
+  accounts.porter.enabled: "true"
+
+  # disable admin user
+  admin.enabled: "false"
