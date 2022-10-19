@@ -62,9 +62,15 @@ func (j *JobEventProducer) ParseFilteredEvents(es []*event.FilteredEvent) error 
 
 			switch e.KubernetesReason {
 			case "Running":
+				fmt.Printf("adding job for %s started event based on filtered event %s (reason %s, message %s)\n", e.PodName, string(e.Source), e.KubernetesReason, e.KubernetesMessage)
 				porterEvent = models.NewJobStartedEventV1()
 			case "Completed":
+				fmt.Printf("adding job for %s finished event based on filtered event %s (reason %s, message %s)\n", e.PodName, string(e.Source), e.KubernetesReason, e.KubernetesMessage)
 				porterEvent = models.NewJobFinishedEventV1()
+			}
+
+			if porterEvent == nil {
+				continue
 			}
 
 			porterEvent.ReleaseName = e.ReleaseName
