@@ -285,6 +285,8 @@ func NewFilteredEventsFromPod(pod *v1.Pod) []*FilteredEvent {
 		if waitingState := containerStatus.State.Waiting; waitingState != nil {
 			// if the waiting state is an image error, we store this as an event as well
 			if waitingState.Reason == "ImagePullBackOff" || waitingState.Reason == "ErrImagePull" || waitingState.Reason == "InvalidImageName" {
+				now := time.Now()
+
 				res = append(res, &FilteredEvent{
 					Source:            Pod,
 					PodName:           pod.Name,
@@ -292,9 +294,9 @@ func NewFilteredEventsFromPod(pod *v1.Pod) []*FilteredEvent {
 					KubernetesReason:  waitingState.Reason,
 					KubernetesMessage: waitingState.Message,
 					Severity:          EventSeverityHigh,
-					// We set this to the creation timestamp of the pod - note that this will miss cases where the image has been
-					// deleted from the registry and the pod was restarted afterwards.
-					Timestamp: &pod.CreationTimestamp.Time,
+					// If the image is currently in a waiting or image pull back off state, we want to alert on that
+					// immediately. We also don't have a good reference time for when image pull back off started.
+					Timestamp: &now,
 				})
 			}
 
