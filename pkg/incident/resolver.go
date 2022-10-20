@@ -37,6 +37,10 @@ const INCIDENT_REPEAT_BUFFER_HOURS = 23
 // critical incident has been resolved
 const CRITICAL_BUFFER_MINUTES = 6
 
+// CRITICAL_BUFFER_RETRIES are the number of times a critical incident check should be retried until the
+// critical incident has been resolved
+const CRITICAL_BUFFER_RETRIES = 3
+
 func (r *IncidentResolver) Run() error {
 	// get all active incidents
 	// TODO: pagination
@@ -109,9 +113,26 @@ func (r *IncidentResolver) isDeploymentResolved(incident *models.Incident) bool 
 
 		if isFailing {
 			r.Logger.Info().Caller().Msgf("incident %s is not resolved because %s is still failing", incident.UniqueID, incident.InvolvedObjectName)
+
+			incident.ResolvedRetryCount = 0
+
+			r.Repository.Incident.UpdateIncident(incident)
 		}
 
-		return !withinBufferWindow && !isFailing
+		// if the deployment is not failing, check against the resolved retry count (and increment the resolved retry count).
+		if !withinBufferWindow && !isFailing {
+			incident.ResolvedRetryCount++
+
+			r.Repository.Incident.UpdateIncident(incident)
+
+			// if the resolved retry count is greater than CRITICAL_BUFFER_RETRIES, this incident is considered resolved
+			if incident.ResolvedRetryCount >= CRITICAL_BUFFER_RETRIES {
+				return true
+			}
+
+		}
+
+		return false
 	}
 
 	// If this is not a critical incident, we check the buffer window for when this was last seen, because pods will
