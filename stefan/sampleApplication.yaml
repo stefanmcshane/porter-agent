@@ -6,7 +6,7 @@ metadata:
   annotations:
     # Scheme for notifications are:
     # notifications.argoproj.io/subscribe.<trigger-name>.<webhook-name>: ""
-    notifications.argoproj.io/subscribe.sync-operation-change.porter-agent: "porter-agent"
+    notifications.argoproj.io/subscribe.app-sync-change.agent: ""
 spec:
   destination:
     namespace: default

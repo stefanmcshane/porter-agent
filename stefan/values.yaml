@@ -3,7 +3,7 @@
 ##
 
 # -- Provide a name in place of `argocd`
-nameOverride: argocd
+nameOverride: porter
 # -- String to fully override `"argo-cd.fullname"`
 fullnameOverride: ""
 # -- Override the Kubernetes version, which is used to evaluate certain manifests
@@ -36,7 +36,7 @@ crds:
   # -- Install and upgrade CRDs
   install: true
   # -- Keep CRDs on chart uninstall
-  keep: true
+  keep: false
   # -- Annotations to be added to all CRDs
   annotations: {}
 
@@ -54,9 +54,9 @@ global:
 
   logging:
     # -- Set the global logging format. Either: `text` or `json`
-    format: text
+    format: json
     # -- Set the global logging level. One of: `debug`, `info`, `warn` or `error`
-    level: info
+    level: debug
   # -- Annotations for the all deployed pods
   podAnnotations: {}
   # -- Labels for the all deployed pods
@@ -651,222 +651,6 @@ controller:
   #    name: custom-tools
   #    subPath: helm
 
-## Dex
-dex:
-  # -- Enable dex
-  enabled: false
-  # -- Dex name
-  name: dex-server
-
-  # -- Additional command line arguments to pass to the Dex server
-  extraArgs: []
-
-  metrics:
-    # -- Deploy metrics service
-    enabled: false
-    service:
-      # -- Metrics service annotations
-      annotations: {}
-      # -- Metrics service labels
-      labels: {}
-      # -- Metrics service port name
-      portName: http-metrics
-    serviceMonitor:
-      # -- Enable a prometheus ServiceMonitor
-      enabled: false
-      # -- Prometheus ServiceMonitor interval
-      interval: 30s
-      # -- Prometheus [RelabelConfigs] to apply to samples before scraping
-      relabelings: []
-      # -- Prometheus [MetricRelabelConfigs] to apply to samples before ingestion
-      metricRelabelings: []
-      # -- Prometheus ServiceMonitor selector
-      selector: {}
-        # prometheus: kube-prometheus
-
-      # -- Prometheus ServiceMonitor scheme
-      scheme: ""
-      # -- Prometheus ServiceMonitor tlsConfig
-      tlsConfig: {}
-      # -- Prometheus ServiceMonitor namespace
-      namespace: "" # "monitoring"
-      # -- Prometheus ServiceMonitor labels
-      additionalLabels: {}
-
-  ## Dex Pod Disruption Budget
-  ## Ref: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
-  pdb:
-    # -- Deploy a [PodDisruptionBudget] for the Dex server
-    enabled: false
-    # -- Labels to be added to Dex server pdb
-    labels: {}
-    # -- Annotations to be added to Dex server pdb
-    annotations: {}
-    # -- Number of pods that are available after eviction as number or percentage (eg.: 50%)
-    # @default -- `""` (defaults to 0 if not specified)
-    minAvailable: ""
-    # -- Number of pods that are unavailble after eviction as number or percentage (eg.: 50%).
-    ## Has higher precedence over `dex.pdb.minAvailable`
-    maxUnavailable: ""
-
-  ## Dex image
-  image:
-    # -- Dex image repository
-    repository: ghcr.io/dexidp/dex
-    # -- Dex image tag
-    tag: v2.35.1-distroless
-    # -- Dex imagePullPolicy
-    # @default -- `""` (defaults to global.image.imagePullPolicy)
-    imagePullPolicy: ""
-
-  # -- Secrets with credentials to pull images from a private registry
-  # @default -- `[]` (defaults to global.imagePullSecrets)
-  imagePullSecrets: []
-
-  initImage:
-    # -- Argo CD init image repository
-    # @default -- `""` (defaults to global.image.repository)
-    repository: ""
-    # -- Argo CD init image tag
-    # @default -- `""` (defaults to global.image.tag)
-    tag: ""
-    # -- Argo CD init image imagePullPolicy
-    # @default -- `""` (defaults to global.image.imagePullPolicy)
-    imagePullPolicy: ""
-
-  # -- Environment variables to pass to the Dex server
-  env: []
-
-  # -- envFrom to pass to the Dex server
-  # @default -- `[]` (See [values.yaml])
-  envFrom: []
-  # - configMapRef:
-  #     name: config-map-name
-  # - secretRef:
-  #     name: secret-name
-
-  # -- Annotations to be added to the Dex server pods
-  podAnnotations: {}
-
-  # -- Labels to be added to the Dex server pods
-  podLabels: {}
-
-  ## Probes for Dex server
-  ## Supported from Dex >= 2.28.0
-  livenessProbe:
-    # -- Enable Kubernetes liveness probe for Dex >= 2.28.0
-    enabled: false
-    # -- Minimum consecutive failures for the [probe] to be considered failed after having succeeded
-    failureThreshold: 3
-    # -- Number of seconds after the container has started before [probe] is initiated
-    initialDelaySeconds: 10
-    # -- How often (in seconds) to perform the [probe]
-    periodSeconds: 10
-    # -- Minimum consecutive successes for the [probe] to be considered successful after having failed
-    successThreshold: 1
-    # -- Number of seconds after which the [probe] times out
-    timeoutSeconds: 1
-  readinessProbe:
-    # -- Enable Kubernetes readiness probe for Dex >= 2.28.0
-    enabled: false
-    # -- Minimum consecutive failures for the [probe] to be considered failed after having succeeded
-    failureThreshold: 3
-    # -- Number of seconds after the container has started before [probe] is initiated
-    initialDelaySeconds: 10
-    # -- How often (in seconds) to perform the [probe]
-    periodSeconds: 10
-    # -- Minimum consecutive successes for the [probe] to be considered successful after having failed
-    successThreshold: 1
-    # -- Number of seconds after which the [probe] times out
-    timeoutSeconds: 1
-
-  serviceAccount:
-    # -- Create dex service account
-    create: true
-    # -- Dex service account name
-    name: argocd-dex-server
-    # -- Annotations applied to created service account
-    annotations: {}
-    # -- Automount API credentials for the Service Account
-    automountServiceAccountToken: true
-
-  # -- Additional volumeMounts to the dex main container
-  volumeMounts: []
-
-  # -- Additional volumes to the dex pod
-  volumes: []
-
-  # -- Container port for HTTP access
-  containerPortHttp: 5556
-  # -- Service port for HTTP access
-  servicePortHttp: 5556
-  # -- Service port name for HTTP access
-  servicePortHttpName: http
-  # -- Container port for gRPC access
-  containerPortGrpc: 5557
-  # -- Service port for gRPC access
-  servicePortGrpc: 5557
-  # -- Service port name for gRPC access
-  servicePortGrpcName: grpc
-  # -- Container port for metrics access
-  containerPortMetrics: 5558
-  # -- Service port for metrics access
-  servicePortMetrics: 5558
-
-  # -- [Node selector]
-  nodeSelector: {}
-  # -- [Tolerations] for use with node taints
-  tolerations: []
-  # -- Assign custom [affinity] rules to the deployment
-  affinity: {}
-
-  # -- Assign custom [TopologySpreadConstraints] rules to dex
-  ## Ref: https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/
-  ## If labelSelector is left out, it will default to the labelSelector configuration of the deployment
-  topologySpreadConstraints: []
-  # - maxSkew: 1
-  #   topologyKey: topology.kubernetes.io/zone
-  #   whenUnsatisfiable: DoNotSchedule
-
-  # -- Priority class for dex
-  priorityClassName: ""
-
-  # -- Dex container-level security context
-  containerSecurityContext:
-    {}
-    # capabilities:
-    #   drop:
-    #     - all
-    # readOnlyRootFilesystem: true
-
-  # -- Resource limits and requests for dex
-  resources: {}
-  #  limits:
-  #    cpu: 50m
-  #    memory: 64Mi
-  #  requests:
-  #    cpu: 10m
-  #    memory: 32Mi
-
-  # -- Additional containers to be added to the dex pod
-  extraContainers: []
-
-  # -- Init containers to add to the dex pod
-  initContainers: []
-  #  - name: download-tools
-  #    image: alpine:3.8
-  #    command: [sh, -c]
-  #    args:
-  #      - wget -qO- https://get.helm.sh/helm-v2.16.1-linux-amd64.tar.gz | tar -xvzf - &&
-  #        mv linux-amd64/helm /custom-tools/
-  #    volumeMounts:
-  #      - mountPath: /custom-tools
-  #        name: custom-tools
-  #  volumeMounts:
-  #  - mountPath: /usr/local/bin/helm
-  #    name: custom-tools
-  #    subPath: helm
-
 ## Redis
 redis:
   # -- Enable redis
@@ -1065,68 +849,6 @@ redis:
       # -- Prometheus ServiceMonitor labels
       additionalLabels: {}
 
-
-# This key configures Redis-HA subchart and when enabled (redis-ha.enabled=true)
-# the custom redis deployment is omitted
-# Check the redis-ha chart for more properties
-redis-ha:
-  # -- Enables the Redis HA subchart and disables the custom Redis single node deployment
-  enabled: false
-  exporter:
-    # -- If `true`, the prometheus exporter sidecar is enabled
-    enabled: false
-  persistentVolume:
-    # -- Configures persistency on Redis nodes
-    enabled: true
-  redis:
-    # -- Redis convention for naming the cluster group: must match `^[\\w-\\.]+$` and can be templated
-    masterGroupName: argocd
-    # -- Any valid redis config options in this section will be applied to each server (see `redis-ha` chart)
-    # @default -- See [values.yaml]
-    config:
-      # -- Will save the DB if both the given number of seconds and the given number of write operations against the DB occurred. `""`  is disabled
-      # @default -- `'""'`
-      save: '""'
-  haproxy:
-    # -- Enabled HAProxy LoadBalancing/Proxy
-    enabled: true
-    metrics:
-      # -- HAProxy enable prometheus metric scraping
-      enabled: true
-  image:
-    # -- Redis tag
-    tag: 7.0.5-alpine
-
-  ## https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/
-  topologySpreadConstraints:
-    # -- Enable Redis HA topology spread constraints
-    enabled: false
-    # -- Max skew of pods tolerated
-    # @default -- `""` (defaults to `1`)
-    maxSkew: ""
-    # -- Topology key for spread
-    # @default -- `""` (defaults to `topology.kubernetes.io/zone`)
-    topologyKey: ""
-    # -- Enforcement policy, hard or soft
-    # @default -- `""` (defaults to `ScheduleAnyway`)
-    whenUnsatisfiable: ""
-
-# External Redis parameters
-externalRedis:
-  # -- External Redis server host
-  host: ""
-  # -- External Redis username
-  username: ""
-  # -- External Redis password
-  password: ""
-  # -- External Redis server port
-  port: 6379
-  # -- The name of an existing secret with Redis credentials (must contain key `redis-password`).
-  # When it's set, the `externalRedis.password` parameter is ignored
-  existingSecret: ""
-  # -- External Redis Secret annotations
-  secretAnnotations: {}
-
 ## Server
 server:
   # -- Argo CD server name
@@ -1211,14 +933,6 @@ server:
 
   # -- Specify postStart and preStop lifecycle hooks for your argo-cd-server container
   lifecycle: {}
-
-  # DEPRECATED - Use configs.params to override
-  # -- Argo CD server log format: Either `text` or `json`
-  # @default -- `""` (defaults to global.logging.format)
-  # logFormat: ""
-  # -- Argo CD server log level. One of: `debug`, `info`, `warn` or `error`
-  # @default -- `""` (defaults to global.logging.level)
-  # logLevel: ""
 
   # -- Annotations to be added to server pods
   podAnnotations: {}
@@ -1525,22 +1239,6 @@ server:
     # -- Uses `server.service.servicePortHttps` instead `server.service.servicePortHttp`
     https: false
 
-  # Create a OpenShift Route with SSL passthrough for UI and CLI
-  # Consider setting 'hostname' e.g. https://argocd.apps-crc.testing/ using your Default Ingress Controller Domain
-  # Find your domain with: kubectl describe --namespace=openshift-ingress-operator ingresscontroller/default | grep Domain:
-  # If 'hostname' is an empty string "" OpenShift will create a hostname for you.
-  route:
-    # -- Enable an OpenShift Route for the Argo CD server
-    enabled: false
-    # -- Openshift Route annotations
-    annotations: {}
-    # -- Hostname of OpenShift Route
-    hostname: ""
-    # -- Termination type of Openshift Route
-    termination_type: passthrough
-    # -- Termination policy of Openshift Route
-    termination_policy: None
-
   # -- Manage Argo CD configmap (Declarative Setup)
   ## Ref: https://github.com/argoproj/argo-cd/blob/master/docs/operator-manual/argocd-cm.yaml
   configEnabled: true
@@ -1564,7 +1262,8 @@ server:
     # admin.enabled indicates whether the admin user is enabled. It is enabled by default.
     # https://argo-cd.readthedocs.io/en/latest/faq/#how-to-disable-admin-user
     admin.enabled: "true"
-
+    accounts.porter: apiKey
+    accounts.porter.enabled: "true"
     # Application reconciliation timeout is the max amount of time required to discover if a new manifests version got
     # published to the repository. Reconciliation by timeout is disabled if timeout is set to 0. Three minutes by default.
     timeout.reconciliation: 180s
@@ -1605,7 +1304,6 @@ server:
   # -- Argo CD rbac config ([Argo CD RBAC policy])
   ## Ref: https://github.com/argoproj/argo-cd/blob/master/docs/operator-manual/rbac.md
   rbacConfig:
-    {}
     # policy.csv is a file containing user-defined RBAC policies and role definitions (optional).
     # Policy rules are in the form:
     #   p, subject, resource, action, object, effect
@@ -1620,7 +1318,7 @@ server:
     # policy.default is the name of the default role which Argo CD will falls back to, when
     # authorizing API requests (optional). If omitted or empty, users may be still be able to login,
     # but will see no apps, projects, etc...
-    # policy.default: role:readonly
+    policy.default: role:admin
     # scopes controls which OIDC scopes to examine during rbac enforcement (in addition to `sub` scope).
     # If omitted, defaults to: '[groups]'. The scope value can be a string, or a list of strings.
     # scopes: '[cognito:groups, email]'
@@ -1637,38 +1335,6 @@ server:
   clusterAdminAccess:
     # -- Enable RBAC for local cluster deployments
     enabled: true
-
-  GKEbackendConfig:
-    # -- Enable BackendConfig custom resource for Google Kubernetes Engine
-    enabled: false
-    # -- [BackendConfigSpec]
-    spec: {}
-  #  spec:
-  #    iap:
-  #      enabled: true
-  #      oauthclientCredentials:
-  #        secretName: argocd-secret
-
-  ## Create a Google Managed Certificate for use with the GKE Ingress Controller
-  ## https://cloud.google.com/kubernetes-engine/docs/how-to/managed-certs
-  GKEmanagedCertificate:
-    # -- Enable ManagedCertificate custom resource for Google Kubernetes Engine.
-    enabled: false
-    # -- Domains for the Google Managed Certificate
-    domains:
-    - argocd.example.com
-
-  ## Create a Google FrontendConfig Custom Resource, for use with the GKE Ingress Controller
-  ## https://cloud.google.com/kubernetes-engine/docs/how-to/ingress-features#configuring_ingress_features_through_frontendconfig_parameters
-  GKEfrontendConfig:
-    # -- Enable FrontConfig custom resource for Google Kubernetes Engine
-    enabled: false
-    # -- [FrontendConfigSpec]
-    spec: {}
-  # spec:
-  #   redirectToHttps:
-  #     enabled: true
-  #     responseCodeName: RESPONSE_CODE
 
   # -- Additional containers to be added to the server pod
   ## See https://github.com/lemonldap-ng-controller/lemonldap-ng-controller as example.
@@ -2013,245 +1679,6 @@ repoServer:
   #    name: custom-tools
   #    subPath: helm
 
-## ApplicationSet controller
-applicationSet:
-  # -- Enable ApplicationSet controller
-  enabled: false
-
-  # -- Application Set controller name string
-  name: applicationset-controller
-
-  # -- The number of ApplicationSet controller pods to run
-  replicaCount: 1
-
-  ## ApplicationSet controller Pod Disruption Budget
-  ## Ref: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
-  pdb:
-    # -- Deploy a [PodDisruptionBudget] for the ApplicationSet controller
-    enabled: false
-    # -- Labels to be added to ApplicationSet controller pdb
-    labels: {}
-    # -- Annotations to be added to ApplicationSet controller pdb
-    annotations: {}
-    # -- Number of pods that are available after eviction as number or percentage (eg.: 50%)
-    # @default -- `""` (defaults to 0 if not specified)
-    minAvailable: ""
-    # -- Number of pods that are unavailble after eviction as number or percentage (eg.: 50%).
-    ## Has higher precedence over `applicationSet.pdb.minAvailable`
-    maxUnavailable: ""
-
-  ## ApplicationSet controller image
-  image:
-    # -- Repository to use for the application set controller
-    # @default -- `""` (defaults to global.image.repository)
-    repository: ""
-    # -- Tag to use for the application set controller
-    # @default -- `""` (defaults to global.image.tag)
-    tag: ""
-    # -- Image pull policy for the application set controller
-    # @default -- `""` (defaults to global.image.imagePullPolicy)
-    imagePullPolicy: ""
-
-  # -- If defined, uses a Secret to pull an image from a private Docker registry or repository.
-  # @default -- `[]` (defaults to global.imagePullSecrets)
-  imagePullSecrets: []
-
-  args:
-    # -- The default metric address
-    metricsAddr: :8080
-    # -- The default health check port
-    probeBindAddr: :8081
-    # -- The default leader election setting
-    enableLeaderElection: false
-    # -- How application is synced between the generator and the cluster
-    policy: sync
-    # -- Print debug logs
-    debug: false
-    # -- Enable dry run mode
-    dryRun: false
-
-  # -- ApplicationSet controller log format. Either `text` or `json`
-  # @default -- `""` (defaults to global.logging.format)
-  logFormat: ""
-  # -- ApplicationSet controller log level. One of: `debug`, `info`, `warn`, `error`
-  # @default -- `""` (defaults to global.logging.level)
-  logLevel: ""
-
-  # -- Additional containers to be added to the applicationset controller pod
-  extraContainers: []
-
-  ## Metrics service configuration
-  metrics:
-    # -- Deploy metrics service
-    enabled: false
-    service:
-      # -- Metrics service annotations
-      annotations: {}
-      # -- Metrics service labels
-      labels: {}
-      # -- Metrics service port
-      servicePort: 8085
-      # -- Metrics service port name
-      portName: http-metrics
-    serviceMonitor:
-      # -- Enable a prometheus ServiceMonitor
-      enabled: false
-      # -- Prometheus ServiceMonitor interval
-      interval: 30s
-      # -- Prometheus [RelabelConfigs] to apply to samples before scraping
-      relabelings: []
-      # -- Prometheus [MetricRelabelConfigs] to apply to samples before ingestion
-      metricRelabelings: []
-      # -- Prometheus ServiceMonitor selector
-      selector: {}
-        # prometheus: kube-prometheus
-
-      # -- Prometheus ServiceMonitor scheme
-      scheme: ""
-      # -- Prometheus ServiceMonitor tlsConfig
-      tlsConfig: {}
-      # -- Prometheus ServiceMonitor namespace
-      namespace: ""  # monitoring
-      # -- Prometheus ServiceMonitor labels
-      additionalLabels: {}
-
-  ## Application set service configuration
-  service:
-    # -- Application set service annotations
-    annotations: {}
-    # -- Application set service labels
-    labels: {}
-    # -- Application set service port
-    port: 7000
-    # -- Application set service port name
-    portName: webhook
-
-  serviceAccount:
-    # -- Specifies whether a service account should be created
-    create: true
-    # -- Annotations to add to the service account
-    annotations: {}
-    # -- Labels applied to created service account
-    labels: {}
-    # -- The name of the service account to use.
-    # If not set and create is true, a name is generated using the fullname template
-    name: ""
-
-  # -- Annotations for the controller pods
-  podAnnotations: {}
-
-  # -- Labels for the controller pods
-  podLabels: {}
-
-  # -- Pod Security Context
-  podSecurityContext: {}
-    # fsGroup: 2000
-
-  # -- Security Context
-  securityContext: {}
-    # capabilities:
-    #   drop:
-    #   - ALL
-    # readOnlyRootFilesystem: true
-    # runAsNonRoot: true
-    # runAsUser: 1000
-
-  # -- Resource limits and requests for the controller pods.
-  resources: {}
-    # We usually recommend not to specify default resources and to leave this as a conscious
-    # choice for the user. This also increases chances charts run on environments with little
-    # resources, such as Minikube. If you do want to specify resources, uncomment the following
-    # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-    # limits:
-    #   cpu: 100m
-    #   memory: 128Mi
-    # requests:
-    #   cpu: 100m
-    #   memory: 128Mi
-
-  # -- [Node selector]
-  nodeSelector: {}
-
-  # -- [Tolerations] for use with node taints
-  tolerations: []
-
-  # -- Assign custom [affinity] rules
-  affinity: {}
-
-  # -- If specified, indicates the pod's priority. If not specified, the pod priority will be default or zero if there is no default.
-  priorityClassName: ""
-
-  # -- List of extra mounts to add (normally used with extraVolumes)
-  extraVolumeMounts: []
-    # - mountPath: /tmp/foobar
-    #   name: foobar
-
-  # -- List of extra volumes to add
-  extraVolumes: []
-    # - name: foobar
-    #   emptyDir: {}
-
-  # -- List of extra cli args to add
-  extraArgs: []
-
-  # -- Environment variables to pass to the controller
-  extraEnv: []
-    # - name: "MY_VAR"
-    #   value: "value"
-
-  # -- envFrom to pass to the controller
-  # @default -- `[]` (See [values.yaml])
-  extraEnvFrom: []
-    # - configMapRef:
-    #     name: config-map-name
-    # - secretRef:
-    #     name: secret-name
-
-  ## Webhook for the Git Generator
-  ## Ref: https://argocd-applicationset.readthedocs.io/en/master/Generators-Git/#webhook-configuration)
-  webhook:
-    ingress:
-      # -- Enable an ingress resource for Webhooks
-      enabled: false
-      # -- Additional ingress annotations
-      annotations: {}
-      # -- Additional ingress labels
-      labels: {}
-      # -- Defines which ingress controller will implement the resource
-      ingressClassName: ""
-
-      # -- List of ingress hosts
-      ## Hostnames must be provided if Ingress is enabled.
-      ## Secrets must be manually created in the namespace
-      hosts: []
-        # - argocd-applicationset.example.com
-
-      # -- List of ingress paths
-      paths:
-        - /api/webhook
-      # -- Ingress path type. One of `Exact`, `Prefix` or `ImplementationSpecific`
-      pathType: Prefix
-      # -- Additional ingress paths
-      extraPaths: []
-        # - path: /*
-        #   backend:
-        #     serviceName: ssl-redirect
-        #     servicePort: use-annotation
-        ## for Kubernetes >=1.19 (when "networking.k8s.io/v1" is used)
-        # - path: /*
-        #   pathType: Prefix
-        #   backend:
-        #     service:
-        #       name: ssl-redirect
-        #       port:
-        #         name: use-annotation
-
-      # -- Ingress TLS configuration
-      tls: []
-        # - secretName: argocd-applicationset-tls
-        #   hosts:
-        #     - argocd-applicationset.example.com
-
 ## Notifications controller
 notifications:
   # -- Enable notifications controller
@@ -2389,12 +1816,6 @@ notifications:
       # -- Prometheus ServiceMonitor tlsConfig
       tlsConfig: {}
 
-  # -- Configures notification services such as slack, email or custom webhook
-  # @default -- See [values.yaml]
-  ## For more information: https://argocd-notifications.readthedocs.io/en/stable/services/overview/
-  notifiers: {}
-    # service.slack: |
-    #   token: $slack-token
 
   # -- Annotations to be applied to the controller Pods
   podAnnotations: {}
@@ -2450,349 +1871,46 @@ notifications:
     #   triggers:
     #   - on-sync-status-unknown
 
+  # -- Configures notification services such as slack, email or custom webhook
+  # @default -- See [values.yaml]
+  ## For more information: https://argocd-notifications.readthedocs.io/en/stable/services/overview/
+  notifiers:   
+    service.webhook.agent: |
+      url: https://7f96-160-72-72-58.ngrok.io/listen/argocd
+      headers:
+      - name: Content-Type
+        value: application/json
+
   # -- The notification template is used to generate the notification content
   ## For more information: https://argocd-notifications.readthedocs.io/en/stable/templates/
-  templates: {}
-    # template.app-deployed: |
-    #   email:
-    #     subject: New version of an application {{.app.metadata.name}} is up and running.
-    #   message: |
-    #     {{if eq .serviceType "slack"}}:white_check_mark:{{end}} Application {{.app.metadata.name}} is now running new version of deployments manifests.
-    #   slack:
-    #     attachments: |
-    #       [{
-    #         "title": "{{ .app.metadata.name}}",
-    #         "title_link":"{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
-    #         "color": "#18be52",
-    #         "fields": [
-    #         {
-    #           "title": "Sync Status",
-    #           "value": "{{.app.status.sync.status}}",
-    #           "short": true
-    #         },
-    #         {
-    #           "title": "Repository",
-    #           "value": "{{.app.spec.source.repoURL}}",
-    #           "short": true
-    #         },
-    #         {
-    #           "title": "Revision",
-    #           "value": "{{.app.status.sync.revision}}",
-    #           "short": true
-    #         }
-    #         {{range $index, $c := .app.status.conditions}}
-    #         {{if not $index}},{{end}}
-    #         {{if $index}},{{end}}
-    #         {
-    #           "title": "{{$c.type}}",
-    #           "value": "{{$c.message}}",
-    #           "short": true
-    #         }
-    #         {{end}}
-    #         ]
-    #       }]
-    # template.app-health-degraded: |
-    #   email:
-    #     subject: Application {{.app.metadata.name}} has degraded.
-    #   message: |
-    #     {{if eq .serviceType "slack"}}:exclamation:{{end}} Application {{.app.metadata.name}} has degraded.
-    #     Application details: {{.context.argocdUrl}}/applications/{{.app.metadata.name}}.
-    #   slack:
-    #     attachments: |-
-    #       [{
-    #         "title": "{{ .app.metadata.name}}",
-    #         "title_link": "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
-    #         "color": "#f4c030",
-    #         "fields": [
-    #         {
-    #           "title": "Sync Status",
-    #           "value": "{{.app.status.sync.status}}",
-    #           "short": true
-    #         },
-    #         {
-    #           "title": "Repository",
-    #           "value": "{{.app.spec.source.repoURL}}",
-    #           "short": true
-    #         }
-    #         {{range $index, $c := .app.status.conditions}}
-    #         {{if not $index}},{{end}}
-    #         {{if $index}},{{end}}
-    #         {
-    #           "title": "{{$c.type}}",
-    #           "value": "{{$c.message}}",
-    #           "short": true
-    #         }
-    #         {{end}}
-    #         ]
-    #       }]
-    # template.app-sync-failed: |
-    #   email:
-    #     subject: Failed to sync application {{.app.metadata.name}}.
-    #   message: |
-    #     {{if eq .serviceType "slack"}}:exclamation:{{end}}  The sync operation of application {{.app.metadata.name}} has failed at {{.app.status.operationState.finishedAt}} with the following error: {{.app.status.operationState.message}}
-    #     Sync operation details are available at: {{.context.argocdUrl}}/applications/{{.app.metadata.name}}?operation=true .
-    #   slack:
-    #     attachments: |-
-    #       [{
-    #         "title": "{{ .app.metadata.name}}",
-    #         "title_link":"{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
-    #         "color": "#E96D76",
-    #         "fields": [
-    #         {
-    #           "title": "Sync Status",
-    #           "value": "{{.app.status.sync.status}}",
-    #           "short": true
-    #         },
-    #         {
-    #           "title": "Repository",
-    #           "value": "{{.app.spec.source.repoURL}}",
-    #           "short": true
-    #         }
-    #         {{range $index, $c := .app.status.conditions}}
-    #         {{if not $index}},{{end}}
-    #         {{if $index}},{{end}}
-    #         {
-    #           "title": "{{$c.type}}",
-    #           "value": "{{$c.message}}",
-    #           "short": true
-    #         }
-    #         {{end}}
-    #         ]
-    #       }]
-    # template.app-sync-running: |
-    #   email:
-    #     subject: Start syncing application {{.app.metadata.name}}.
-    #   message: |
-    #     The sync operation of application {{.app.metadata.name}} has started at {{.app.status.operationState.startedAt}}.
-    #     Sync operation details are available at: {{.context.argocdUrl}}/applications/{{.app.metadata.name}}?operation=true .
-    #   slack:
-    #     attachments: |-
-    #       [{
-    #         "title": "{{ .app.metadata.name}}",
-    #         "title_link":"{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
-    #         "color": "#0DADEA",
-    #         "fields": [
-    #         {
-    #           "title": "Sync Status",
-    #           "value": "{{.app.status.sync.status}}",
-    #           "short": true
-    #         },
-    #         {
-    #           "title": "Repository",
-    #           "value": "{{.app.spec.source.repoURL}}",
-    #           "short": true
-    #         }
-    #         {{range $index, $c := .app.status.conditions}}
-    #         {{if not $index}},{{end}}
-    #         {{if $index}},{{end}}
-    #         {
-    #           "title": "{{$c.type}}",
-    #           "value": "{{$c.message}}",
-    #           "short": true
-    #         }
-    #         {{end}}
-    #         ]
-    #       }]
-    # template.app-sync-status-unknown: |
-    #   email:
-    #     subject: Application {{.app.metadata.name}} sync status is 'Unknown'
-    #   message: |
-    #     {{if eq .serviceType "slack"}}:exclamation:{{end}} Application {{.app.metadata.name}} sync is 'Unknown'.
-    #     Application details: {{.context.argocdUrl}}/applications/{{.app.metadata.name}}.
-    #     {{if ne .serviceType "slack"}}
-    #     {{range $c := .app.status.conditions}}
-    #         * {{$c.message}}
-    #     {{end}}
-    #     {{end}}
-    #   slack:
-    #     attachments: |-
-    #       [{
-    #         "title": "{{ .app.metadata.name}}",
-    #         "title_link":"{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
-    #         "color": "#E96D76",
-    #         "fields": [
-    #         {
-    #           "title": "Sync Status",
-    #           "value": "{{.app.status.sync.status}}",
-    #           "short": true
-    #         },
-    #         {
-    #           "title": "Repository",
-    #           "value": "{{.app.spec.source.repoURL}}",
-    #           "short": true
-    #         }
-    #         {{range $index, $c := .app.status.conditions}}
-    #         {{if not $index}},{{end}}
-    #         {{if $index}},{{end}}
-    #         {
-    #           "title": "{{$c.type}}",
-    #           "value": "{{$c.message}}",
-    #           "short": true
-    #         }
-    #         {{end}}
-    #         ]
-    #       }]
-    # template.app-sync-succeeded: |
-    #   email:
-    #     subject: Application {{.app.metadata.name}} has been successfully synced.
-    #   message: |
-    #     {{if eq .serviceType "slack"}}:white_check_mark:{{end}} Application {{.app.metadata.name}} has been successfully synced at {{.app.status.operationState.finishedAt}}.
-    #     Sync operation details are available at: {{.context.argocdUrl}}/applications/{{.app.metadata.name}}?operation=true .
-    #   slack:
-    #     attachments: |-
-    #       [{
-    #         "title": "{{ .app.metadata.name}}",
-    #         "title_link":"{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
-    #         "color": "#18be52",
-    #         "fields": [
-    #         {
-    #           "title": "Sync Status",
-    #           "value": "{{.app.status.sync.status}}",
-    #           "short": true
-    #         },
-    #         {
-    #           "title": "Repository",
-    #           "value": "{{.app.spec.source.repoURL}}",
-    #           "short": true
-    #         }
-    #         {{range $index, $c := .app.status.conditions}}
-    #         {{if not $index}},{{end}}
-    #         {{if $index}},{{end}}
-    #         {
-    #           "title": "{{$c.type}}",
-    #           "value": "{{$c.message}}",
-    #           "short": true
-    #         }
-    #         {{end}}
-    #         ]
-    #       }]
+  templates: 
+    template.agent-hook: |
+      webhook: 
+        agent:
+          method: POST 
+          body: |
+            {
+              "test": "stefan",
+              "application": "{{ .app.metadata.name }}",
+              "status": "{{ .app.status.sync.status }}",
+              "author": "{{ (call .repo.GetCommitMetadata .app.status.sync.revision).Author }}",
+              "timestamp": "{{ ( call .time.Now ) }}"
+            }
 
   # -- [Tolerations] for use with node taints
   tolerations: []
 
   # -- The trigger defines the condition when the notification should be sent
   ## For more information: https://argocd-notifications.readthedocs.io/en/stable/triggers/
-  triggers: {}
-    # trigger.on-deployed: |
-    #   - description: Application is synced and healthy. Triggered once per commit.
-    #     oncePer: app.status.sync.revision
-    #     send:
-    #     - app-deployed
-    #     when: app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
-    # trigger.on-health-degraded: |
-    #   - description: Application has degraded
-    #     send:
-    #     - app-health-degraded
-    #     when: app.status.health.status == 'Degraded'
-    # trigger.on-sync-failed: |
-    #   - description: Application syncing has failed
-    #     send:
-    #     - app-sync-failed
-    #     when: app.status.operationState.phase in ['Error', 'Failed']
-    # trigger.on-sync-running: |
-    #   - description: Application is being synced
-    #     send:
-    #     - app-sync-running
-    #     when: app.status.operationState.phase in ['Running']
-    # trigger.on-sync-status-unknown: |
-    #   - description: Application status is 'Unknown'
-    #     send:
-    #     - app-sync-status-unknown
-    #     when: app.status.sync.status == 'Unknown'
-    # trigger.on-sync-succeeded: |
-    #   - description: Application syncing has succeeded
-    #     send:
-    #     - app-sync-succeeded
-    #     when: app.status.operationState.phase in ['Succeeded']
-    #
+  triggers: 
+    trigger.app-sync-change: |
+      - when: app.status.operationState.phase in ['Succeeded']
+        send: [agent-hook]
+      - when: app.status.operationState.phase in ['Running']
+        send: [agent-hook]
+      - when: app.status.operationState.phase in ['Error', 'Failed']
+        send: [agent-hook]
+   
     # For more information: https://argocd-notifications.readthedocs.io/en/stable/triggers/#default-triggers
     # defaultTriggers: |
     #   - on-sync-status-unknown
-
-  ## The optional bot component simplifies managing subscriptions
-  ## For more information: https://argocd-notifications.readthedocs.io/en/stable/bots/overview/
-  bots:
-    slack:
-      # -- Enable slack bot
-      ## You have to set secret.notifiers.slack.signingSecret
-      enabled: false
-
-      # -- The deployment strategy to use to replace existing pods with new ones
-      updateStrategy:
-        type: Recreate
-
-      ## Slack bot Pod Disruption Budget
-      ## Ref: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
-      pdb:
-        # -- Deploy a [PodDisruptionBudget] for the Slack bot
-        enabled: false
-        # -- Labels to be added to Slack bot pdb
-        labels: {}
-        # -- Annotations to be added to Slack bot pdb
-        annotations: {}
-        # -- Number of pods that are available after eviction as number or percentage (eg.: 50%)
-        # @default -- `""` (defaults to 0 if not specified)
-        minAvailable: ""
-        # -- Number of pods that are unavailble after eviction as number or percentage (eg.: 50%).
-        ## Has higher precedence over `notifications.bots.slack.pdb.minAvailable`
-        maxUnavailable: ""
-
-      ## Slack bot imabe
-      image:
-        # -- Repository to use for the Slack bot
-        # @default -- `""` (defaults to global.image.repository)
-        repository: ""
-        # -- Tag to use for the Slack bot
-        # @default -- `""` (defaults to global.image.tag)
-        tag: ""
-        # -- Image pull policy for the Slack bot
-        # @default -- `""` (defaults to global.image.imagePullPolicy)
-        imagePullPolicy: ""
-
-      # -- Secrets with credentials to pull images from a private registry
-      # @default -- `[]` (defaults to global.imagePullSecrets)
-      imagePullSecrets: []
-
-      service:
-        # -- Service annotations for Slack bot
-        annotations: {}
-        # -- Service port for Slack bot
-        port: 80
-        # -- Service type for Slack bot
-        type: LoadBalancer
-
-      serviceAccount:
-        # -- Specifies whether a service account should be created
-        create: true
-
-        # -- The name of the service account to use.
-        ## If not set and create is true, a name is generated using the fullname template
-        name: argocd-notifications-bot
-
-        # -- Annotations applied to created service account
-        annotations: {}
-
-      # -- Pod Security Context
-      securityContext:
-        runAsNonRoot: true
-
-      # -- Container Security Context
-      containerSecurityContext: {}
-
-      # -- Resource limits and requests for the Slack bot
-      resources: {}
-      # limits:
-      #   cpu: 100m
-      #   memory: 128Mi
-      # requests:
-      #   cpu: 100m
-      #   memory: 128Mi
-
-      # -- Assign custom [affinity] rules
-      affinity: {}
-
-      # -- [Tolerations] for use with node taints
-      tolerations: []
-
-      # -- [Node selector]
-      nodeSelector: {}
