@@ -12,4 +12,4 @@ data:
   accounts.porter.enabled: "true"
 
   # disable admin user
-  admin.enabled: "false"
+  admin.enabled: "true"

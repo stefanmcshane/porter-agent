@@ -6,6 +6,7 @@ import (
 
 	"github.com/porter-dev/porter-agent/api/server/config"
 	"github.com/porter-dev/porter-agent/api/server/types"
+	"github.com/porter-dev/porter-agent/pkg/controllers"
 	"github.com/porter-dev/porter/api/server/shared"
 )
 
@@ -35,11 +36,11 @@ func (h ResourceHookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println("STEFAN", req)
 
-	// ar, err := controllers.NewArgoCDClient()
-	// if err != nil {
-	// 	fmt.Println("error", err)
-	// 	return
-	// }
-	// _ = ar
+	ar, err := controllers.NewArgoCDClient()
+	if err != nil {
+		fmt.Println("error", err)
+		return
+	}
+	_ = ar
 
 }

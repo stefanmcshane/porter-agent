@@ -2255,7 +2255,7 @@ applicationSet:
 ## Notifications controller
 notifications:
   # -- Enable notifications controller
-  enabled: false
+  enabled: true
 
   # -- Notifications controller name string
   name: notifications-controller
@@ -2332,10 +2332,10 @@ notifications:
 
   # -- Application controller log format. Either `text` or `json`
   # @default -- `""` (defaults to global.logging.format)
-  logFormat: ""
+  logFormat: "json"
   # -- Application controller log level. One of: `debug`, `info`, `warn`, `error`
   # @default -- `""` (defaults to global.logging.level)
-  logLevel: ""
+  logLevel: "debug"
 
   # -- Extra arguments to provide to the controller
   extraArgs: []

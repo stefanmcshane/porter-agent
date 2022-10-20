@@ -1,50 +1,42 @@
 package controllers
 
-// import (
-// 	"context"
-// 	"fmt"
+import (
+	"context"
+	"crypto/tls"
+	"net/http"
 
-// 	argocd "github.com/argoproj/argo-cd/v2/pkg/apiclient"
-// 	argoapp "github.com/argoproj/argo-cd/v2/pkg/apiclient/application"
-// )
+	argocd "github.com/stefanmcshane/go-argocd/argocd"
+	"github.com/stefanmcshane/go-argocd/argocd/client/application_service"
+)
 
-// type ArgoCD struct {
-// 	Client argocd.Client
-// }
+type ArgoCD struct {
+	// Client argocdclient.
+}
 
-// func NewArgoCDClient() (ArgoCD, error) {
-// 	var cli ArgoCD
+func NewArgoCDClient() (ArgoCD, error) {
+	var cli ArgoCD
 
-// 	opts := argocd.ClientOptions{
-// 		ServerAddr: "localhost:8080",
-// 		Insecure:   true,
-// 		AuthToken:  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJhcmdvY2QiLCJzdWIiOiJwb3J0ZXI6YXBpS2V5IiwibmJmIjoxNjY2MTUxMDI3LCJpYXQiOjE2NjYxNTEwMjcsImp0aSI6ImZkODg3ZWZjLTE1N2UtNDdhMC05OTY3LTk3MjI2OWY1ODM1MSJ9.7_xx879dOde4Z82DTV2SnW5eNzEWAw1-mLjn0cltTG8",
-// 	}
-// 	client, err := argocd.NewClient(&opts)
-// 	if err != nil {
-// 		return cli, err
-// 	}
-// 	appClo, appCli, err := client.NewApplicationClient()
-// 	if err != nil {
-// 		return cli, err
-// 	}
-// 	defer appClo.Close()
+	argoConf := argocd.ArgoCDClientOpts{
+		Host:      "localhost",
+		Port:      "8080",
+		APIToken:  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJhcmdvY2QiLCJzdWIiOiJwb3J0ZXI6YXBpS2V5IiwibmJmIjoxNjY2MjIyODc5LCJpYXQiOjE2NjYyMjI4NzksImp0aSI6IjAwN2Y2NzA1LWE2ZmMtNDI3My1iNjlmLWEwZTFiMzcyOGQ1OCJ9.5t_P5mPMksbqZIj59gn-ToFpsSRDpQQZSBylNVHpLLQ",
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+		Debug:     false,
+	}
 
-// 	ctx := context.Background()
-// 	applicationName := "test"
-// 	in := argoapp.ApplicationQuery{
-// 		Name: &applicationName,
-// 	}
-// 	application, err := appCli.Get(ctx, &in)
-// 	if err != nil {
-// 		return cli, err
-// 	}
+	argoClient, err := argocd.NewArgoCDWithAPIKey(argoConf)
+	if err != nil {
+		return cli, err
+	}
 
-// 	fmt.Println("STEFAN", application)
+	params := application_service.ApplicationServiceListParams{
+		Context: context.Background(),
+	}
+	resp, err := argoClient.ApplicationService.ApplicationServiceList(&params)
+	if err != nil {
+		return cli, err
+	}
 
-// 	return cli, nil
-// }
-
-// func (a ArgoCD) Consume() {
-
-// }
+	_ = resp
+	return cli, nil
+}
