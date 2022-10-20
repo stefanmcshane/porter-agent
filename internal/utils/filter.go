@@ -3,10 +3,12 @@ package utils
 import "github.com/porter-dev/porter-agent/api/server/types"
 
 type ListIncidentsFilter struct {
-	Status           *types.IncidentStatus
-	ReleaseName      *string
-	ReleaseNamespace *string
-	Revision         *string
+	Status             *types.IncidentStatus
+	ReleaseName        *string
+	ReleaseNamespace   *string
+	Revision           *string
+	InvolvedObjectKind *string
+	InvolvedObjectName *string
 }
 
 type ListEventsFilter struct {

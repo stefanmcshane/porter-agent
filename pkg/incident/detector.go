@@ -256,13 +256,23 @@ func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, 
 	// a primary cause event with the same summary as the candidate incident.
 	statusActive := types.IncidentStatusActive
 
-	candidateMatches, _, err := d.Repository.Incident.ListIncidents(&utils.ListIncidentsFilter{
+	filter := &utils.ListIncidentsFilter{
 		Status:           &statusActive,
 		ReleaseName:      &incident.ReleaseName,
 		ReleaseNamespace: &incident.ReleaseNamespace,
-	})
+	}
 
-	fmt.Printf("length of candidate matches for incident %s (%s) is %d\n", incident.UniqueID, incident.InvolvedObjectName, len(candidateMatches))
+	// we case on jobs differently - we only merge jobs with the same involved object name
+	if strings.ToLower(string(incident.InvolvedObjectKind)) == "job" {
+		kindFilter := string(incident.InvolvedObjectKind)
+
+		filter.InvolvedObjectKind = &kindFilter
+		filter.InvolvedObjectName = &incident.InvolvedObjectName
+	}
+
+	candidateMatches, _, err := d.Repository.Incident.ListIncidents(filter)
+
+	fmt.Printf("length of first pass candidate matches for incident %s (%s) is %d\n", incident.UniqueID, incident.InvolvedObjectName, len(candidateMatches))
 
 	if err != nil {
 		return nil

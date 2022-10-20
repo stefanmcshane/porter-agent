@@ -68,6 +68,14 @@ func (r *IncidentRepository) ListIncidents(
 		db = db.Where("revision = ?", *filter.Revision)
 	}
 
+	if filter.InvolvedObjectKind != nil {
+		db = db.Where("involved_object_kind = ?", *filter.InvolvedObjectKind)
+	}
+
+	if filter.InvolvedObjectName != nil {
+		db = db.Where("involved_object_kind = ?", *filter.InvolvedObjectName)
+	}
+
 	paginatedResult := &utils.PaginatedResult{}
 
 	db = db.Scopes(utils.Paginate(opts, db, paginatedResult))
