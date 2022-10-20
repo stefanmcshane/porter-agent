@@ -1890,7 +1890,6 @@ notifications:
           method: POST 
           body: |
             {
-              "test": "stefan",
               "application": "{{ .app.metadata.name }}",
               "status": "{{ .app.status.sync.status }}",
               "author": "{{ (call .repo.GetCommitMetadata .app.status.sync.revision).Author }}",
