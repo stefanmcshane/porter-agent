@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/porter-dev/porter-agent/api/server/types"
 	"github.com/porter-dev/porter-agent/internal/logger"
@@ -331,13 +330,15 @@ func mergeEvents(events1, events2 []models.IncidentEvent) []models.IncidentEvent
 	}
 
 	// any matched events are updated, other events are appended
-	now := time.Now()
-
 	for _, e2 := range events2 {
 		key := fmt.Sprintf("%s/%s-%v-%s", e2.PodName, e2.PodNamespace, e2.IsPrimaryCause, e2.Summary)
 
 		if e1, exists := keyMap[key]; exists {
-			e1.LastSeen = &now
+			// take the later of the last seen times
+			if e2.LastSeen.After(*e1.LastSeen) {
+				e1.LastSeen = e2.LastSeen
+			}
+
 			e1.Detail = e2.Detail
 		} else {
 			keyMap[key] = e2

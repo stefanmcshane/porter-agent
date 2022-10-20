@@ -30,6 +30,11 @@ type Alerter struct {
 }
 
 func (a *Alerter) HandleIncident(incident *models.Incident, triggeringPodName string) error {
+	if !wasLastSeenWithinHour(incident) {
+		a.Logger.Info().Caller().Msgf("skipping alert for incident %s as it was not seen within the last hour", incident.UniqueID)
+		return nil
+	}
+
 	// first we case on jobs, as they have a custom alerting configuration
 	if strings.ToLower(string(incident.InvolvedObjectKind)) == "job" && a.shouldAlertImmediateJob(incident, triggeringPodName) {
 		err := a.Client.NotifyNew(incident.ToAPIType())
@@ -126,4 +131,9 @@ func (a *Alerter) updateAlertConfig(incident *models.Incident, triggeringPodName
 	incident, err := a.Repository.Incident.UpdateIncident(incident)
 
 	return err
+}
+
+func wasLastSeenWithinHour(incident *models.Incident) bool {
+	// if the incident was last seen within the hour, we return true
+	return incident.LastSeen.After(time.Now().Add(-1 * time.Hour))
 }
