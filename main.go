@@ -38,6 +38,7 @@ import (
 
 	"github.com/porter-dev/porter-agent/api/server/config"
 	eventHandlers "github.com/porter-dev/porter-agent/api/server/handlers/event"
+	healthcheckHandlers "github.com/porter-dev/porter-agent/api/server/handlers/healthcheck"
 	incidentHandlers "github.com/porter-dev/porter-agent/api/server/handlers/incident"
 	logHandlers "github.com/porter-dev/porter-agent/api/server/handlers/log"
 	statusHandlers "github.com/porter-dev/porter-agent/api/server/handlers/status"
@@ -188,6 +189,9 @@ func main() {
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 
 	r.Mount("/debug", middleware.Profiler())
+
+	r.Method("GET", "/livez", healthcheckHandlers.NewLivezHandler(conf))
+	r.Method("GET", "/readyz", healthcheckHandlers.NewReadyzHandler(conf))
 
 	r.Method("GET", "/incidents", incidentHandlers.NewListIncidentsHandler(conf))
 
