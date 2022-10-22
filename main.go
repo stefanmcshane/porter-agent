@@ -15,31 +15,30 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	"github.com/gin-gonic/gin"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
-	"github.com/porter-dev/porter-agent/internal/envconf"
-	"github.com/porter-dev/porter-agent/internal/models"
-
-	"github.com/gin-gonic/gin"
 	"github.com/joeshaw/envdecode"
-	"github.com/porter-dev/porter-agent/internal/adapter"
-	"github.com/porter-dev/porter-agent/internal/logger"
-	"github.com/porter-dev/porter-agent/internal/repository"
-	"github.com/porter-dev/porter-agent/pkg/alerter"
-	"github.com/porter-dev/porter-agent/pkg/httpclient"
-	"github.com/porter-dev/porter-agent/pkg/incident"
-	"github.com/porter-dev/porter-agent/pkg/logstore"
-	"github.com/porter-dev/porter-agent/pkg/logstore/lokistore"
-	"github.com/porter-dev/porter-agent/pkg/logstore/memorystore"
-	"github.com/porter-dev/porter-agent/pkg/pulsar"
-
 	"github.com/porter-dev/porter-agent/api/server/config"
 	argoHandlers "github.com/porter-dev/porter-agent/api/server/handlers/argo"
 	eventHandlers "github.com/porter-dev/porter-agent/api/server/handlers/event"
 	incidentHandlers "github.com/porter-dev/porter-agent/api/server/handlers/incident"
 	logHandlers "github.com/porter-dev/porter-agent/api/server/handlers/log"
 	statusHandlers "github.com/porter-dev/porter-agent/api/server/handlers/status"
+	"github.com/porter-dev/porter-agent/internal/adapter"
+	"github.com/porter-dev/porter-agent/internal/envconf"
+	"github.com/porter-dev/porter-agent/internal/logger"
+	"github.com/porter-dev/porter-agent/internal/models"
+	"github.com/porter-dev/porter-agent/internal/repository"
+	"github.com/porter-dev/porter-agent/pkg/alerter"
+	"github.com/porter-dev/porter-agent/pkg/controllers"
+	"github.com/porter-dev/porter-agent/pkg/httpclient"
+	"github.com/porter-dev/porter-agent/pkg/incident"
+	"github.com/porter-dev/porter-agent/pkg/logstore"
+	"github.com/porter-dev/porter-agent/pkg/logstore/lokistore"
+	"github.com/porter-dev/porter-agent/pkg/logstore/memorystore"
+	"github.com/porter-dev/porter-agent/pkg/pulsar"
 )
 
 var (
@@ -172,6 +171,20 @@ func main() {
 		l.Fatal().Caller().Msgf("server config loading failed: %v", err)
 	}
 
+	// argoConf := argocd.ArgoCDConfig{
+	// 	Host:      "localhost",
+	// 	Port:      "8080",
+	// 	Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+	// 	Debug:     false,
+	// }
+
+	// argoClient, err := argocd.NewArgoCDClient(ctx, argoConf)
+	// if err != nil {
+	// 	l.Fatal().Caller().Msgf("connecting to argo failed: %v", err)
+	// }
+
+	argoConsumer := controllers.NewArgoCDResourceHookConsumer(conf.Repository)
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
@@ -194,7 +207,7 @@ func main() {
 
 	r.Method("GET", "/status", statusHandlers.NewGetStatusHandler(conf))
 
-	r.Method(http.MethodPost, "/listen/argocd", argoHandlers.NewResourceHookHandler(conf))
+	r.Method(http.MethodPost, "/listen/argocd", argoHandlers.NewResourceHookHandler(conf, argoConsumer))
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", envDecoderConf.ServerPort), r); err != nil {
 		l.Error().Caller().Msgf("error starting API server: %v", err)

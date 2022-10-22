@@ -5,6 +5,7 @@ import (
 
 	"github.com/porter-dev/porter-agent/internal/envconf"
 	"github.com/porter-dev/porter-agent/internal/repository"
+	"github.com/porter-dev/porter-agent/pkg/argocd"
 	"github.com/porter-dev/porter-agent/pkg/logstore"
 	"github.com/porter-dev/porter/api/server/shared/apierrors/alerter"
 	"github.com/porter-dev/porter/pkg/logger"
@@ -20,6 +21,8 @@ type Config struct {
 	Repository *repository.Repository
 
 	LogStore logstore.LogStore
+
+	ArgoCD argocd.ArgoCDConfig
 }
 
 func GetConfig(envConf *envconf.EnvDecoderConf, repo *repository.Repository, ls logstore.LogStore) (*Config, error) {
