@@ -1,0 +1,68 @@
+[
+    {
+        "apiVersion": "v1",
+        "count": 34,
+        "eventTime": null,
+        "firstTimestamp": "2022-09-27T15:47:36Z",
+        "involvedObject": {
+            "apiVersion": "v1",
+            "fieldPath": "spec.containers{web}",
+            "kind": "Pod",
+            "name": "failing-probe-test-web-6f99c87bf9-5rzlg",
+            "namespace": "default",
+            "resourceVersion": "54443",
+            "uid": "d88a44fc-018e-4611-8d30-09fa4c384abc"
+        },
+        "kind": "Event",
+        "lastTimestamp": "2022-09-27T17:22:42Z",
+        "message": "Pulling image \"ubuntu:latest\"",
+        "metadata": {
+            "creationTimestamp": "2022-09-27T15:47:36Z",
+            "name": "failing-probe-test-web-6f99c87bf9-5rzlg.1718c2435ba46a63",
+            "namespace": "default",
+            "resourceVersion": "82305",
+            "uid": "194ce338-72a8-46b1-af5d-787cc5b64c6e"
+        },
+        "reason": "Pulling",
+        "reportingComponent": "",
+        "reportingInstance": "",
+        "source": {
+            "component": "kubelet",
+            "host": "ip-10-99-3-212.us-west-2.compute.internal"
+        },
+        "type": "Normal"
+    },
+    {
+        "apiVersion": "v1",
+        "count": 322,
+        "eventTime": null,
+        "firstTimestamp": "2022-09-27T15:52:07Z",
+        "involvedObject": {
+            "apiVersion": "v1",
+            "fieldPath": "spec.containers{web}",
+            "kind": "Pod",
+            "name": "failing-probe-test-web-6f99c87bf9-5rzlg",
+            "namespace": "default",
+            "resourceVersion": "54443",
+            "uid": "d88a44fc-018e-4611-8d30-09fa4c384abc"
+        },
+        "kind": "Event",
+        "lastTimestamp": "2022-09-27T17:17:45Z",
+        "message": "Back-off restarting failed container",
+        "metadata": {
+            "creationTimestamp": "2022-09-27T15:52:46Z",
+            "name": "failing-probe-test-web-6f99c87bf9-5rzlg.1718c28243d4da4a",
+            "namespace": "default",
+            "resourceVersion": "80863",
+            "uid": "cbfb5c17-1133-4a24-b217-ea4d064cbe7f"
+        },
+        "reason": "BackOff",
+        "reportingComponent": "",
+        "reportingInstance": "",
+        "source": {
+            "component": "kubelet",
+            "host": "ip-10-99-3-212.us-west-2.compute.internal"
+        },
+        "type": "Warning"
+    }
+]

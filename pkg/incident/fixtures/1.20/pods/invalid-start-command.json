@@ -1,0 +1,225 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "name": "failing-job-run-vdztcgeptg-rdr7c",
+        "generateName": "failing-job-run-vdztcgeptg-",
+        "namespace": "default",
+        "uid": "bf69350f-9794-4d07-9194-10ee706d4016",
+        "resourceVersion": "3857668",
+        "creationTimestamp": "2022-10-06T15:52:42Z",
+        "labels": {
+            "app.kubernetes.io/instance": "failing-job-run",
+            "controller-uid": "57023ab5-7903-4e19-b531-cc9ab4fdfd55",
+            "helm.sh/chart": "job-0.75.0",
+            "helm.sh/revision": "1",
+            "job-name": "failing-job-run-vdztcgeptg",
+            "meta.helm.sh/release-name": "failing-job-run"
+        },
+        "annotations": {
+            "cluster-autoscaler.kubernetes.io/safe-to-evict": "false",
+            "kubernetes.io/psp": "eks.privileged"
+        },
+        "ownerReferences": [
+            {
+                "apiVersion": "batch/v1",
+                "kind": "Job",
+                "name": "failing-job-run-vdztcgeptg",
+                "uid": "57023ab5-7903-4e19-b531-cc9ab4fdfd55",
+                "controller": true,
+                "blockOwnerDeletion": true
+            }
+        ]
+    },
+    "spec": {
+        "volumes": [
+            {
+                "name": "default-token-mkhbh",
+                "secret": {
+                    "secretName": "default-token-mkhbh",
+                    "defaultMode": 420
+                }
+            }
+        ],
+        "containers": [
+            {
+                "name": "job",
+                "image": "801172602658.dkr.ecr.us-east-2.amazonaws.com/failing-job-run-default:default",
+                "resources": {
+                    "limits": {
+                        "memory": "256Mi"
+                    },
+                    "requests": {
+                        "cpu": "100m",
+                        "memory": "256Mi"
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "name": "default-token-mkhbh",
+                        "readOnly": true,
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount"
+                    }
+                ],
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "imagePullPolicy": "IfNotPresent"
+            },
+            {
+                "name": "sidecar",
+                "image": "public.ecr.aws/o1j4x7p4/job-sidecar:latest",
+                "command": [
+                    "./job_killer.sh",
+                    "-c",
+                    "30",
+                    ""
+                ],
+                "env": [
+                    {
+                        "name": "TIMEOUT",
+                        "value": "3600"
+                    }
+                ],
+                "resources": {
+                    "limits": {
+                        "memory": "10Mi"
+                    },
+                    "requests": {
+                        "cpu": "10m",
+                        "memory": "10Mi"
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "name": "default-token-mkhbh",
+                        "readOnly": true,
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount"
+                    }
+                ],
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "imagePullPolicy": "Always"
+            }
+        ],
+        "restartPolicy": "Never",
+        "terminationGracePeriodSeconds": 30,
+        "dnsPolicy": "ClusterFirst",
+        "serviceAccountName": "default",
+        "serviceAccount": "default",
+        "nodeName": "ip-10-99-3-212.us-west-2.compute.internal",
+        "shareProcessNamespace": true,
+        "securityContext": {},
+        "imagePullSecrets": [
+            {
+                "name": "porter-ecr-51"
+            }
+        ],
+        "schedulerName": "default-scheduler",
+        "tolerations": [
+            {
+                "key": "removable",
+                "operator": "Equal",
+                "value": "true",
+                "effect": "NoSchedule"
+            },
+            {
+                "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists",
+                "effect": "NoExecute",
+                "tolerationSeconds": 300
+            },
+            {
+                "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists",
+                "effect": "NoExecute",
+                "tolerationSeconds": 300
+            }
+        ],
+        "priority": 0,
+        "enableServiceLinks": true,
+        "preemptionPolicy": "PreemptLowerPriority"
+    },
+    "status": {
+        "phase": "Failed",
+        "conditions": [
+            {
+                "type": "Initialized",
+                "status": "True",
+                "lastProbeTime": null,
+                "lastTransitionTime": "2022-10-06T15:52:42Z"
+            },
+            {
+                "type": "Ready",
+                "status": "False",
+                "lastProbeTime": null,
+                "lastTransitionTime": "2022-10-06T15:52:42Z",
+                "reason": "ContainersNotReady",
+                "message": "containers with unready status: [job sidecar]"
+            },
+            {
+                "type": "ContainersReady",
+                "status": "False",
+                "lastProbeTime": null,
+                "lastTransitionTime": "2022-10-06T15:52:42Z",
+                "reason": "ContainersNotReady",
+                "message": "containers with unready status: [job sidecar]"
+            },
+            {
+                "type": "PodScheduled",
+                "status": "True",
+                "lastProbeTime": null,
+                "lastTransitionTime": "2022-10-06T15:52:42Z"
+            }
+        ],
+        "hostIP": "10.99.3.212",
+        "podIP": "10.99.3.65",
+        "podIPs": [
+            {
+                "ip": "10.99.3.65"
+            }
+        ],
+        "startTime": "2022-10-06T15:52:42Z",
+        "containerStatuses": [
+            {
+                "name": "job",
+                "state": {
+                    "terminated": {
+                        "exitCode": 127,
+                        "reason": "ContainerCannotRun",
+                        "message": "failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: exec: \"porter-rocks\": executable file not found in $PATH: unknown",
+                        "startedAt": "2022-10-06T15:52:44Z",
+                        "finishedAt": "2022-10-06T15:52:44Z",
+                        "containerID": "docker://7b318ed47842355d8410691d8f13a2dc454715613d8d6c52dda5f242f765020c"
+                    }
+                },
+                "lastState": {},
+                "ready": false,
+                "restartCount": 0,
+                "image": "801172602658.dkr.ecr.us-east-2.amazonaws.com/failing-job-run-default:default",
+                "imageID": "docker-pullable://801172602658.dkr.ecr.us-east-2.amazonaws.com/failing-job-run-default@sha256:c776817568fdac57d10833cb3e935c4b8ebd900e5fb072229536cc0e69f316ff",
+                "containerID": "docker://7b318ed47842355d8410691d8f13a2dc454715613d8d6c52dda5f242f765020c",
+                "started": false
+            },
+            {
+                "name": "sidecar",
+                "state": {
+                    "terminated": {
+                        "exitCode": 0,
+                        "reason": "Completed",
+                        "startedAt": "2022-10-06T15:52:44Z",
+                        "finishedAt": "2022-10-06T15:52:56Z",
+                        "containerID": "docker://1cc80acf36ff1fffb4604da8bb1c55f19231673329839b23c4436808c72d6288"
+                    }
+                },
+                "lastState": {},
+                "ready": false,
+                "restartCount": 0,
+                "image": "public.ecr.aws/o1j4x7p4/job-sidecar:latest",
+                "imageID": "docker-pullable://public.ecr.aws/o1j4x7p4/job-sidecar@sha256:b1af7c71be9bf66fcba0115dff962cf66e563fb03b8499ccbdc28723a591dbbe",
+                "containerID": "docker://1cc80acf36ff1fffb4604da8bb1c55f19231673329839b23c4436808c72d6288",
+                "started": false
+            }
+        ],
+        "qosClass": "Burstable"
+    }
+}

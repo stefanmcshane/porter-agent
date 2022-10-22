@@ -1,28 +1,44 @@
-# Build the manager binary
-FROM golang:1.18 as builder
+# syntax=docker/dockerfile:1.1.7-experimental
 
-WORKDIR /workspace
-# Copy the Go Modules manifests
-COPY go.mod go.mod
-COPY go.sum go.sum
-# cache deps before building and copying source so that we don't need to re-download as much
-# and so that source changes don't invalidate our downloaded layer
+# Base Go environment
+# -------------------
+FROM golang:1.18-alpine as base
+WORKDIR /porter
+
+RUN apk update && apk add --no-cache gcc musl-dev git protoc
+
+COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy the go source
-COPY main.go main.go
-# COPY api/ api/
-COPY pkg/ pkg/
-COPY controllers/ controllers/
+COPY main.go ./
+COPY /api ./api
+COPY /cli ./cli
+COPY /internal ./internal
+COPY /pkg ./pkg
 
-# Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
-WORKDIR /
-COPY --from=builder /workspace/manager .
-USER 65532:65532
+# Go build environment
+# --------------------
+FROM base AS build-go
 
-ENTRYPOINT ["/manager"]
+# build proto files
+ARG version=production
+
+RUN go build -a -o ./bin/agent .
+RUN go build -a -o ./bin/agent-cli ./cli
+
+# Deployment environment
+# ----------------------
+FROM alpine
+RUN apk update && apk add --no-cache curl
+
+COPY --from=build-go /porter/bin/agent /porter/
+COPY --from=build-go /porter/bin/agent-cli /porter/
+
+ENV SERVER_PORT=10001
+ENV SERVER_TIMEOUT_READ=5s
+ENV SERVER_TIMEOUT_WRITE=10s
+ENV SERVER_TIMEOUT_IDLE=15s
+
+EXPOSE 10001
+CMD /porter/agent
