@@ -23,6 +23,10 @@ apiVersionOverrides:
   # -- String to override apiVersion of pod disruption budgets rendered by this helm chart
   pdb: "" # policy/v1
 
+dex:
+  enabled: false
+applicationSet:
+  enabled: false
 # -- Create clusterroles that extend existing clusterroles to interact with argo-cd crds
 ## Ref: https://kubernetes.io/docs/reference/access-authn-authz/rbac/#aggregated-clusterroles
 createAggregateRoles: false
@@ -1318,7 +1322,7 @@ server:
     # policy.default is the name of the default role which Argo CD will falls back to, when
     # authorizing API requests (optional). If omitted or empty, users may be still be able to login,
     # but will see no apps, projects, etc...
-    policy.default: role:admin
+    policy.default: role:readonly
     # scopes controls which OIDC scopes to examine during rbac enforcement (in addition to `sub` scope).
     # If omitted, defaults to: '[groups]'. The scope value can be a string, or a list of strings.
     # scopes: '[cognito:groups, email]'
@@ -1891,6 +1895,7 @@ notifications:
           body: |
             {
               "application": "{{ .app.metadata.name }}",
+              "namespace": "{{ .app.metadata.namespace }}",
               "status": "{{ .app.status.sync.status }}",
               "author": "{{ (call .repo.GetCommitMetadata .app.status.sync.revision).Author }}",
               "timestamp": "{{ ( call .time.Now ) }}"

@@ -43,12 +43,19 @@ Ensure that you are logged in as admin, and run the following:
 
 `argocd account generate-token --account porter`
 
+TODO: Add this as API function
+
 ### Test notification sending
 
 - Watch the logs on your porter-agent
 - Run `kubectl scale deploy nginx-test-web --replicas=3`
 - ArgoCD will force this back to 2 replicas
 - Check the porter-agent logs, you should see a notification that has come through for each sync state
+
+## Read events
+
+- Ensure porter-agent is running (on port 10001)
+- Run `curl localhost:10001/events`
 
 ```
 Received argo hook: types.ArgoCDResourceHook{Application:"guestbook", Status:"OutOfSync", Author:"Stefan McShane <stefanmcshane@users.noreply.github.com>", Timestamp:"2022-10-20 05:13:02.025725757 +0000 UTC m=+21.390802220"}
