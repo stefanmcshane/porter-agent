@@ -26,7 +26,7 @@ func NewArgoCDResourceHookConsumer(repo *repository.Repository) ArgoCDResourceHo
 
 // Consume contains all business logic for consuming an argo resource hook
 func (co ArgoCDResourceHookConsumer) Consume(ctx context.Context, argoEvent types.ArgoCDResourceHook) error {
-	fmt.Printf("Received argo hook: %#v\n", argoEvent)
+	co.logger.Caller().Info().Msgf("Received argo hook: %#v\n", argoEvent)
 
 	ty, ok := resourceHookToEvent[argoEvent.Status]
 	if !ok {
