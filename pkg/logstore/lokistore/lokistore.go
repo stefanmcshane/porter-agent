@@ -159,11 +159,11 @@ func (store *LokiStore) Tail(options logstore.TailOptions, w logstore.Writer, st
 }
 
 func (store *LokiStore) GetPodLabelValues(options logstore.LabelValueOptions) ([]string, error) {
-	return store.getPorterPodNameSplitIndex(options, 0)
+	return store.getPorterPodNameSplitIndex(options, 1)
 }
 
 func (store *LokiStore) GetRevisionLabelValues(options logstore.LabelValueOptions) ([]string, error) {
-	return store.getPorterPodNameSplitIndex(options, 1)
+	return store.getPorterPodNameSplitIndex(options, 2)
 }
 
 func (store *LokiStore) getPorterPodNameSplitIndex(options logstore.LabelValueOptions, index int) ([]string, error) {
@@ -173,9 +173,9 @@ func (store *LokiStore) getPorterPodNameSplitIndex(options logstore.LabelValueOp
 	defer cancel()
 
 	if options.Revision != "" {
-		matchRegexExpr = fmt.Sprintf("%s-%s_%s", options.PodPrefix, "[a-z0-9]+(-[a-z0-9]+)*", options.Revision)
+		matchRegexExpr = fmt.Sprintf("%s_%s-%s_%s", options.Namespace, options.PodPrefix, "[a-z0-9]+(-[a-z0-9]+)*", options.Revision)
 	} else {
-		matchRegexExpr = fmt.Sprintf("%s-%s", options.PodPrefix, "[a-z0-9]+(-[a-z0-9]+)*")
+		matchRegexExpr = fmt.Sprintf("%s_%s-%s", options.Namespace, options.PodPrefix, "[a-z0-9]+(-[a-z0-9]+)*")
 	}
 
 	labelValues, err := store.querierClient.Label(ctx, &proto.LabelRequest{

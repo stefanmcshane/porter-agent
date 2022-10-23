@@ -27,6 +27,7 @@ type QueryOptions struct {
 type LabelValueOptions struct {
 	Start     time.Time
 	End       time.Time
+	Namespace string
 	PodPrefix string
 	Revision  string
 }
