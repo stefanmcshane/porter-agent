@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
@@ -10,7 +12,10 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-chi/chi"
@@ -18,6 +23,7 @@ import (
 	"github.com/go-chi/render"
 	"github.com/joeshaw/envdecode"
 	"github.com/porter-dev/porter-agent/api/server/config"
+	"github.com/porter-dev/porter-agent/api/server/handlers/application"
 	argoHandlers "github.com/porter-dev/porter-agent/api/server/handlers/argo"
 	eventHandlers "github.com/porter-dev/porter-agent/api/server/handlers/event"
 	healthcheckHandlers "github.com/porter-dev/porter-agent/api/server/handlers/healthcheck"
@@ -29,6 +35,7 @@ import (
 	"github.com/porter-dev/porter-agent/internal/logger"
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter-agent/internal/repository"
+	"github.com/porter-dev/porter-agent/pkg/argocd"
 	"github.com/porter-dev/porter-agent/pkg/controllers"
 	"github.com/porter-dev/porter-agent/pkg/logstore"
 	"github.com/porter-dev/porter-agent/pkg/logstore/lokistore"
@@ -40,7 +47,8 @@ var (
 )
 
 func main() {
-	// kubeClient := kubernetes.NewForConfigOrDie(ctrl.GetConfigOrDie())
+	kubeClient := kubernetes.NewForConfigOrDie(ctrl.GetConfigOrDie())
+	ctx := context.Background()
 
 	var envDecoderConf envconf.EnvDecoderConf = envconf.EnvDecoderConf{}
 
@@ -173,19 +181,30 @@ func main() {
 		l.Fatal().Caller().Msgf("server config loading failed: %v", err)
 	}
 
-	// argoConf := argocd.ArgoCDConfig{
-	// 	Host:      "localhost",
-	// 	Port:      "8080",
-	// 	Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
-	// 	Debug:     false,
-	// }
+	si, err := kubeClient.CoreV1().Secrets("argocd").Get(ctx, "argocd-initial-admin-secret", v1.GetOptions{})
+	if err != nil {
+		l.Fatal().Caller().Msgf("failed to get argo api token secret: %v", err)
+	}
+	var pw string
+	if pwby, ok := si.Data["password"]; ok {
+		pw = string(pwby)
+	}
 
-	// argoClient, err := argocd.NewArgoCDClient(ctx, argoConf)
-	// if err != nil {
-	// 	l.Fatal().Caller().Msgf("connecting to argo failed: %v", err)
-	// }
+	argoConf := argocd.ArgoCDConfig{
+		Host:      "localhost",
+		Port:      "8080",
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+		Debug:     true,
+		Username:  "admin",
+		Password:  pw,
+	}
 
-	argoConsumer := controllers.NewArgoCDResourceHookConsumer(conf.Repository)
+	argoClient, err := argocd.NewArgoCDClient(ctx, argoConf)
+	if err != nil {
+		l.Fatal().Caller().Msgf("connecting to argo failed: %v", err)
+	}
+
+	argoConsumer := controllers.NewArgoCDResourceHookConsumer(conf.Repository, l)
 
 	r := chi.NewRouter()
 
@@ -214,6 +233,9 @@ func main() {
 	r.Method("GET", "/status", statusHandlers.NewGetStatusHandler(conf))
 
 	r.Method(http.MethodPost, "/listen/argocd", argoHandlers.NewResourceHookHandler(conf, argoConsumer))
+
+	r.Method(http.MethodPost, "/application/sync", application.NewApplicationSyncHandler(conf, argoClient))
+	r.Method(http.MethodPost, "/application/rollback", application.NewApplicationRollbackHandler(conf, argoClient))
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", envDecoderConf.ServerPort), r); err != nil {
 		l.Error().Caller().Msgf("error starting API server: %v", err)

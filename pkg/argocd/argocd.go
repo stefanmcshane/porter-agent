@@ -1,3 +1,4 @@
+//go:generate mockgen -source argocd.go -destination mocks/argocd.go
 package argocd
 
 import (
@@ -11,6 +12,8 @@ import (
 
 // ArgoCD abstracts the underlying module to allow for easier testing
 type ArgoCD interface {
+	Sync(ctx context.Context, app Application) error
+	Rollback(ctx context.Context, app Application) error
 }
 
 // ArgoCDConfig contains all details for connecting to ArgoCD
@@ -24,14 +27,14 @@ type ArgoCDConfig struct {
 	Debug     bool
 }
 
-// ArgoCD wraps the ArgoCD go module
-type ArgoCDClient struct {
+// argoCDClient wraps the ArgoCD go module
+type argoCDClient struct {
 	client *client.ConsolidateServices
 }
 
 // NewArgoCDClient creates an implementation of ArgoCD
 func NewArgoCDClient(ctx context.Context, conf ArgoCDConfig) (ArgoCD, error) {
-	var cli ArgoCDClient
+	var cli argoCDClient
 
 	argoConf := argocd.ArgoCDClientOpts{
 		Host:      conf.Host,

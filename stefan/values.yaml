@@ -1880,7 +1880,7 @@ notifications:
   ## For more information: https://argocd-notifications.readthedocs.io/en/stable/services/overview/
   notifiers:   
     service.webhook.agent: |
-      url: https://7f96-160-72-72-58.ngrok.io/listen/argocd
+      url: https://be67-194-46-37-37.eu.ngrok.io/listen/argocd
       headers:
       - name: Content-Type
         value: application/json
