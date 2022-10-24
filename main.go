@@ -2,149 +2,267 @@ package main
 
 import (
 	"context"
-	"flag"
+	"crypto/tls"
+	"fmt"
+	"net/http"
 	"os"
 	"time"
 
+	"gorm.io/gorm"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
-
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
-	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/gin-gonic/gin"
-	"github.com/porter-dev/porter-agent/controllers"
-	"github.com/porter-dev/porter-agent/pkg/consumer"
-	"github.com/porter-dev/porter-agent/pkg/server/routes"
-	"github.com/porter-dev/porter-agent/pkg/utils"
-	//+kubebuilder:scaffold:imports
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
+	"github.com/go-chi/render"
+	"github.com/joeshaw/envdecode"
+	"github.com/porter-dev/porter-agent/api/server/config"
+	"github.com/porter-dev/porter-agent/api/server/handlers/application"
+	argoHandlers "github.com/porter-dev/porter-agent/api/server/handlers/argo"
+	eventHandlers "github.com/porter-dev/porter-agent/api/server/handlers/event"
+	healthcheckHandlers "github.com/porter-dev/porter-agent/api/server/handlers/healthcheck"
+	incidentHandlers "github.com/porter-dev/porter-agent/api/server/handlers/incident"
+	logHandlers "github.com/porter-dev/porter-agent/api/server/handlers/log"
+	statusHandlers "github.com/porter-dev/porter-agent/api/server/handlers/status"
+	"github.com/porter-dev/porter-agent/internal/adapter"
+	"github.com/porter-dev/porter-agent/internal/envconf"
+	"github.com/porter-dev/porter-agent/internal/logger"
+	"github.com/porter-dev/porter-agent/internal/models"
+	"github.com/porter-dev/porter-agent/internal/repository"
+	"github.com/porter-dev/porter-agent/pkg/argocd"
+	"github.com/porter-dev/porter-agent/pkg/controllers"
+	"github.com/porter-dev/porter-agent/pkg/logstore"
+	"github.com/porter-dev/porter-agent/pkg/logstore/lokistore"
+	"github.com/porter-dev/porter-agent/pkg/logstore/memorystore"
 )
 
 var (
-	scheme        = runtime.NewScheme()
-	setupLog      = ctrl.Log.WithName("setup")
-	eventConsumer *consumer.EventConsumer
-
 	httpServer *gin.Engine
 )
 
-func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
-	//+kubebuilder:scaffold:scheme
-}
-
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8000", "The address the metric endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
-	opts := zap.Options{
-		Development: true,
-	}
-	opts.BindFlags(flag.CommandLine)
-	flag.Parse()
+	kubeClient := kubernetes.NewForConfigOrDie(ctrl.GetConfigOrDie())
+	ctx := context.Background()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	var envDecoderConf envconf.EnvDecoderConf = envconf.EnvDecoderConf{}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "5731d595.porter.run",
-	})
-	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+	if err := envdecode.StrictDecode(&envDecoderConf); err != nil {
+		logger.NewErrorConsole(true).Fatal().Caller().Msgf("could not decode env conf: %v", err)
+
 		os.Exit(1)
 	}
 
-	// first check if the redis server is running and wait for it if needed
-	kubeClient := kubernetes.NewForConfigOrDie(mgr.GetConfig())
+	l := logger.NewConsole(envDecoderConf.Debug)
+
+	// client := httpclient.NewClient(&envDecoderConf.HTTPClientConf, l)
+
+	// create database connection through adapter
+	db, err := adapter.New(&envDecoderConf.DBConf)
+
+	if err != nil {
+		l.Fatal().Caller().Msgf("could not create database connection: %v", err)
+	}
+
+	if err := repository.AutoMigrate(db, false); err != nil {
+		l.Fatal().Caller().Msgf("auto migration failed: %v", err)
+	}
+
+	var logStore logstore.LogStore
+	var logStoreKind string
+	if envDecoderConf.LogStoreConf.LogStoreKind == "memory" {
+		logStoreKind = "memory"
+		logStore, err = memorystore.New("test", memorystore.Options{})
+	} else {
+		logStoreKind = "loki"
+		lokistore.SetupLokiStatus(envDecoderConf.LogStoreConf.LogStoreAddress)
+		logStore, err = lokistore.New("test", lokistore.LogStoreConfig{
+			Address:     envDecoderConf.LogStoreConf.LogStoreAddress,
+			HTTPAddress: envDecoderConf.LogStoreConf.LogStoreHTTPAddress,
+		})
+	}
+
+	if err != nil {
+		l.Fatal().Caller().Msgf("%s-based log store setup failed: %v", logStoreKind, err)
+	}
+
+	go cleanupEventCache(db, l)
+
+	repo := repository.NewRepository(db)
+
+	// alerter := &alerter.Alerter{
+	// 	Client:     client,
+	// 	Repository: repo,
+	// 	Logger:     l,
+	// 	AlertConfiguration: &alerter.AlertConfiguration{
+	// 		DefaultJobAlertConfiguration: alerter.JobAlertConfigurationEvery,
+	// 	},
+	// }
+
+	// detector := &incident.IncidentDetector{
+	// 	KubeClient: kubeClient,
+	// 	// TODO: don't hardcode to 1.20
+	// 	KubeVersion: incident.KubernetesVersion_1_20,
+	// 	Repository:  repo,
+	// 	Alerter:     alerter,
+	// 	Logger:      l,
+	// }
+
+	// resolver := &incident.IncidentResolver{
+	// 	KubeClient: kubeClient,
+	// 	// TODO: don't hardcode to 1.20
+	// 	KubeVersion: incident.KubernetesVersion_1_20,
+	// 	Repository:  repo,
+	// 	Alerter:     alerter,
+	// 	Logger:      l,
+	// }
+
+	// jobProducer := &job.JobEventProducer{
+	// 	KubeClient: *kubeClient,
+	// 	Repository: repo,
+	// 	Logger:     l,
+	// }
+
+	// // trigger resolver through pulsar
+	// go func() {
+	// 	p := pulsar.NewPulsar(1, time.Minute) // pulse every 1 minute
+
+	// 	for range p.Pulsate() {
+	// 		err := resolver.Run()
+
+	// 		if err != nil {
+	// 			l.Error().Caller().Msgf("resolver exited with error: %v", err)
+	// 		}
+	// 	}
+	// }()
+
+	// eventController := controllers.EventController{
+	// 	KubeClient: kubeClient,
+	// 	// TODO: don't hardcode to 1.20
+	// 	KubeVersion: incident.KubernetesVersion_1_20,
+	// 	// IncidentDetector: detector,
+	// 	Repository: repo,
+	// 	LogStore:   logStore,
+	// 	Logger:     l,
+	// 	// JobProducer:      jobProducer,
+	// }
+
+	// go eventController.Start()
+
+	// podController := controllers.PodController{
+	// 	KubeClient: kubeClient,
+	// 	// TODO: don't hardcode to 1.20
+	// 	KubeVersion: incident.KubernetesVersion_1_20,
+	// 	IncidentDetector: detector,
+	// 	Logger: l,
+	// 	JobProducer:      jobProducer,
+	// }
+
+	// go podController.Start()
+
+	// helmSecretController := controllers.HelmSecretController{
+	// 	KubeClient: kubeClient,
+	// 	// TODO: don't hardcode to 1.20
+	// 	KubeVersion: incident.KubernetesVersion_1_20,
+	// 	Logger:      l,
+	// 	Repository:  repo,
+	// }
+
+	// go helmSecretController.Start()
+
+	conf, err := config.GetConfig(&envDecoderConf, repo, logStore)
+
+	if err != nil {
+		l.Fatal().Caller().Msgf("server config loading failed: %v", err)
+	}
+
+	si, err := kubeClient.CoreV1().Secrets("argocd").Get(ctx, "argocd-initial-admin-secret", v1.GetOptions{})
+	if err != nil {
+		l.Fatal().Caller().Msgf("failed to get argo api token secret: %v", err)
+	}
+	var pw string
+	if pwby, ok := si.Data["password"]; ok {
+		pw = string(pwby)
+	}
+
+	argoConf := argocd.ArgoCDConfig{
+		Host:      "localhost",
+		Port:      "8080",
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+		Debug:     true,
+		Username:  "admin",
+		Password:  pw,
+	}
+
+	argoClient, err := argocd.NewArgoCDClient(ctx, argoConf)
+	if err != nil {
+		l.Fatal().Caller().Msgf("connecting to argo failed: %v", err)
+	}
+
+	argoConsumer := controllers.NewArgoCDResourceHookConsumer(conf.Repository, l)
+
+	r := chi.NewRouter()
+
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Use(render.SetContentType(render.ContentTypeJSON))
+
+	r.Mount("/debug", middleware.Profiler())
+
+	r.Method("GET", "/livez", healthcheckHandlers.NewLivezHandler(conf))
+	r.Method("GET", "/readyz", healthcheckHandlers.NewReadyzHandler(conf))
+
+	r.Method("GET", "/incidents", incidentHandlers.NewListIncidentsHandler(conf))
+
+	r.Method("GET", "/incidents", incidentHandlers.NewListIncidentsHandler(conf))
+	r.Method("GET", "/incidents/{uid}", incidentHandlers.NewGetIncidentHandler(conf))
+	r.Method("GET", "/incidents/events", incidentHandlers.NewListIncidentEventsHandler(conf))
+
+	r.Method("GET", "/logs", logHandlers.NewGetLogHandler(conf))
+	r.Method("GET", "/logs/pod_values", logHandlers.NewGetPodValuesHandler(conf))
+	r.Method("GET", "/logs/revision_values", logHandlers.NewGetRevisionValuesHandler(conf))
+
+	r.Method("GET", "/events", eventHandlers.NewListEventsHandler(conf))
+	r.Method("GET", "/events/job", eventHandlers.NewListJobEventsHandler(conf))
+
+	r.Method("GET", "/status", statusHandlers.NewGetStatusHandler(conf))
+
+	r.Method(http.MethodPost, "/listen/argocd", argoHandlers.NewResourceHookHandler(conf, argoConsumer))
+
+	r.Method(http.MethodPost, "/application/sync", application.NewApplicationSyncHandler(conf, argoClient))
+	r.Method(http.MethodPost, "/application/rollback", application.NewApplicationRollbackHandler(conf, argoClient))
+
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", envDecoderConf.ServerPort), r); err != nil {
+		l.Error().Caller().Msgf("error starting API server: %v", err)
+	}
+}
+
+func cleanupEventCache(db *gorm.DB, l *logger.Logger) {
 	for {
-		pods, err := kubeClient.CoreV1().Pods("porter-agent-system").List(
-			context.Background(), v1.ListOptions{
-				LabelSelector: "app.kubernetes.io/name=redis",
-			},
-		)
+		l.Info().Caller().Msgf("cleaning up old event caches")
 
-		if err == nil && len(pods.Items) > 0 {
-			running := false
+		var olderCache []*models.EventCache
 
-			for _, pod := range pods.Items {
-				if pod.Status.Phase == corev1.PodRunning {
-					running = true
-					break
+		if err := db.Model(&models.EventCache{}).Where("timestamp <= ?", time.Now().Add(-time.Hour)).Find(&olderCache).Error; err == nil {
+			numDeleted := 0
+
+			for _, cache := range olderCache {
+				if err := db.Delete(cache).Error; err != nil {
+					l.Error().Caller().Msgf("error deleting old event cache with ID: %d. Error: %v\n", cache.ID, err)
+					numDeleted++
 				}
 			}
 
-			if running {
-				break
-			}
+			l.Info().Caller().Msgf("deleted %d event cache objects from database", numDeleted)
+		} else {
+			l.Error().Caller().Msgf("error querying for older event cache DB entries: %v\n", err)
 		}
 
-		setupLog.Info("waiting for redis ...")
-		time.Sleep(time.Second * 2)
-	}
-
-	if err = (&controllers.PodReconciler{
-		Client:     mgr.GetClient(),
-		Scheme:     mgr.GetScheme(),
-		KubeClient: kubeClient,
-		PodFilter:  utils.NewAgentPodFilter(kubeClient),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Pod")
-		os.Exit(1)
-	}
-	//+kubebuilder:scaffold:builder
-
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
-		os.Exit(1)
-	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
-		os.Exit(1)
-	}
-
-	// create the event consumer
-	setupLog.Info("creating event consumer")
-	eventConsumer = consumer.NewEventConsumer(50, time.Millisecond, context.TODO())
-
-	setupLog.Info("starting event consumer")
-	go eventConsumer.Start()
-
-	setupLog.Info("starting HTTP server")
-	httpServer = routes.NewRouter()
-	go httpServer.Run(":10001")
-
-	go func() {
-		// every 5 minutes, we check for deleted pods
-		// if a pod that was part of an active incident
-		// was deleted, we set the pod's status to resolved
-		for {
-			time.Sleep(time.Minute * 5)
-			controllers.ProcessDeletedPods()
-		}
-	}()
-
-	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
+		time.Sleep(time.Hour)
 	}
 }

@@ -1,0 +1,215 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "annotations": {
+            "helm.sh/revision": "1",
+            "kubernetes.io/psp": "eks.privileged"
+        },
+        "creationTimestamp": "2022-09-27T17:38:11Z",
+        "generateName": "non-zero-exit-code-web-9d5f4cc54-",
+        "labels": {
+            "app.kubernetes.io/instance": "non-zero-exit-code",
+            "app.kubernetes.io/name": "web",
+            "pod-template-hash": "9d5f4cc54"
+        },
+        "name": "non-zero-exit-code-web-9d5f4cc54-lk9sc",
+        "namespace": "default",
+        "ownerReferences": [
+            {
+                "apiVersion": "apps/v1",
+                "blockOwnerDeletion": true,
+                "controller": true,
+                "kind": "ReplicaSet",
+                "name": "non-zero-exit-code-web-9d5f4cc54",
+                "uid": "99b52b17-49cf-4dfd-8484-ab9cfa61c5fd"
+            }
+        ],
+        "resourceVersion": "425535",
+        "uid": "b0123393-4271-4a07-b40e-91d4e86cf0ec"
+    },
+    "spec": {
+        "containers": [
+            {
+                "env": [
+                    {
+                        "name": "PORTER_POD_REVISION",
+                        "value": "1"
+                    },
+                    {
+                        "name": "PORTER_POD_NAME",
+                        "valueFrom": {
+                            "fieldRef": {
+                                "apiVersion": "v1",
+                                "fieldPath": "metadata.name"
+                            }
+                        }
+                    },
+                    {
+                        "name": "PORTER_POD_IP",
+                        "valueFrom": {
+                            "fieldRef": {
+                                "apiVersion": "v1",
+                                "fieldPath": "status.podIP"
+                            }
+                        }
+                    },
+                    {
+                        "name": "PORTER_POD_IMAGE_TAG",
+                        "value": "default"
+                    },
+                    {
+                        "name": "PORTER_NODE_NAME",
+                        "valueFrom": {
+                            "fieldRef": {
+                                "apiVersion": "v1",
+                                "fieldPath": "spec.nodeName"
+                            }
+                        }
+                    }
+                ],
+                "image": "801172602658.dkr.ecr.us-east-2.amazonaws.com/non-zero-exit-code-default:default",
+                "imagePullPolicy": "Always",
+                "name": "web",
+                "ports": [
+                    {
+                        "containerPort": 80,
+                        "name": "http",
+                        "protocol": "TCP"
+                    }
+                ],
+                "resources": {
+                    "limits": {
+                        "memory": "256Mi"
+                    },
+                    "requests": {
+                        "cpu": "100m",
+                        "memory": "256Mi"
+                    }
+                },
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "non-zero-exit-code-web-token-qdxjd",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "enableServiceLinks": true,
+        "imagePullSecrets": [
+            {
+                "name": "porter-ecr-51"
+            }
+        ],
+        "nodeName": "ip-10-99-3-212.us-west-2.compute.internal",
+        "preemptionPolicy": "PreemptLowerPriority",
+        "priority": 0,
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {},
+        "serviceAccount": "non-zero-exit-code-web",
+        "serviceAccountName": "non-zero-exit-code-web",
+        "terminationGracePeriodSeconds": 30,
+        "tolerations": [
+            {
+                "effect": "NoSchedule",
+                "key": "removable",
+                "operator": "Equal",
+                "value": "true"
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            }
+        ],
+        "volumes": [
+            {
+                "name": "non-zero-exit-code-web-token-qdxjd",
+                "secret": {
+                    "defaultMode": 420,
+                    "secretName": "non-zero-exit-code-web-token-qdxjd"
+                }
+            }
+        ]
+    },
+    "status": {
+        "conditions": [
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2022-09-27T17:38:11Z",
+                "status": "True",
+                "type": "Initialized"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2022-09-28T05:35:54Z",
+                "message": "containers with unready status: [web]",
+                "reason": "ContainersNotReady",
+                "status": "False",
+                "type": "Ready"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2022-09-28T05:35:54Z",
+                "message": "containers with unready status: [web]",
+                "reason": "ContainersNotReady",
+                "status": "False",
+                "type": "ContainersReady"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2022-09-27T17:38:11Z",
+                "status": "True",
+                "type": "PodScheduled"
+            }
+        ],
+        "containerStatuses": [
+            {
+                "containerID": "docker://4d8c57d6fd18f84e82d7dd27273a521c39f5df955b9ce3c29431edb3d9dc9cf8",
+                "image": "801172602658.dkr.ecr.us-east-2.amazonaws.com/non-zero-exit-code-default:default",
+                "imageID": "docker-pullable://801172602658.dkr.ecr.us-east-2.amazonaws.com/non-zero-exit-code-default@sha256:4001c45947de38a2635356daa17f5041dadb1d53db70ce5c2c4299f506fdaf8e",
+                "lastState": {
+                    "terminated": {
+                        "containerID": "docker://4d8c57d6fd18f84e82d7dd27273a521c39f5df955b9ce3c29431edb3d9dc9cf8",
+                        "exitCode": 102,
+                        "finishedAt": "2022-09-28T05:35:54Z",
+                        "reason": "Error",
+                        "startedAt": "2022-09-28T05:33:54Z"
+                    }
+                },
+                "name": "web",
+                "ready": false,
+                "restartCount": 104,
+                "started": false,
+                "state": {
+                    "waiting": {
+                        "message": "Back-off pulling image \"801172602658.dkr.ecr.us-east-2.amazonaws.com/non-zero-exit-code-default:default\"",
+                        "reason": "ImagePullBackOff"
+                    }
+                }
+            }
+        ],
+        "hostIP": "10.99.3.212",
+        "phase": "Running",
+        "podIP": "10.99.3.224",
+        "podIPs": [
+            {
+                "ip": "10.99.3.224"
+            }
+        ],
+        "qosClass": "Burstable",
+        "startTime": "2022-09-27T17:38:11Z"
+    }
+}

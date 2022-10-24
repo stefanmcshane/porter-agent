@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: guestbook
+  namespace: argocd
+  annotations:
+    # Scheme for notifications are:
+    # notifications.argoproj.io/subscribe.<trigger-name>.<webhook-name>: ""
+    notifications.argoproj.io/subscribe.app-sync-change.agent: ""
+spec:
+  destination:
+    namespace: default
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    repoURL: https://github.com/abelanger5/manifests-repo-test-public
+    path: agent-test-1-20/default/nginx-test/manifests
+    targetRevision: HEAD
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
