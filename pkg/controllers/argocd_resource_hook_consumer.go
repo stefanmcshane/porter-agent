@@ -19,15 +19,16 @@ type ArgoCDResourceHookConsumer struct {
 }
 
 // NewArgoCDResourceHookConsumer creates an ArgoCDResourceHookConsumer
-func NewArgoCDResourceHookConsumer(repo *repository.Repository) ArgoCDResourceHookConsumer {
+func NewArgoCDResourceHookConsumer(repo *repository.Repository, logger *logger.Logger) ArgoCDResourceHookConsumer {
 	return ArgoCDResourceHookConsumer{
 		Repository: repo,
+		logger:     logger,
 	}
 }
 
 // Consume contains all business logic for consuming an argo resource hook
 func (co ArgoCDResourceHookConsumer) Consume(ctx context.Context, argoEvent types.ArgoCDResourceHook) error {
-	co.logger.Info().Msgf("Received argo hook: %#v\n", argoEvent)
+	co.logger.Debug().Msgf("Received argo hook: %#v\n", argoEvent)
 
 	ty, ok := resourceHookToEvent[argoEvent.Status]
 	if !ok {
@@ -56,12 +57,10 @@ func (co ArgoCDResourceHookConsumer) Consume(ctx context.Context, argoEvent type
 		UniqueID:         uid,
 	}
 
-	ev, err := co.Repository.Event.CreateEvent(&porterEvent)
+	_, err = co.Repository.Event.CreateEvent(&porterEvent)
 	if err != nil {
 		return fmt.Errorf("error storing argo event: %w", err)
 	}
-
-	fmt.Printf("porterEvent %#v\n\n", ev.UniqueID)
 
 	return nil
 }

@@ -7,13 +7,10 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	"k8s.io/client-go/kubernetes"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
-	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-chi/chi"
@@ -32,15 +29,10 @@ import (
 	"github.com/porter-dev/porter-agent/internal/logger"
 	"github.com/porter-dev/porter-agent/internal/models"
 	"github.com/porter-dev/porter-agent/internal/repository"
-	"github.com/porter-dev/porter-agent/pkg/alerter"
 	"github.com/porter-dev/porter-agent/pkg/controllers"
-	"github.com/porter-dev/porter-agent/pkg/httpclient"
-	"github.com/porter-dev/porter-agent/pkg/incident"
-	"github.com/porter-dev/porter-agent/pkg/job"
 	"github.com/porter-dev/porter-agent/pkg/logstore"
 	"github.com/porter-dev/porter-agent/pkg/logstore/lokistore"
 	"github.com/porter-dev/porter-agent/pkg/logstore/memorystore"
-	"github.com/porter-dev/porter-agent/pkg/pulsar"
 )
 
 var (
@@ -48,7 +40,7 @@ var (
 )
 
 func main() {
-	kubeClient := kubernetes.NewForConfigOrDie(ctrl.GetConfigOrDie())
+	// kubeClient := kubernetes.NewForConfigOrDie(ctrl.GetConfigOrDie())
 
 	var envDecoderConf envconf.EnvDecoderConf = envconf.EnvDecoderConf{}
 
@@ -60,7 +52,7 @@ func main() {
 
 	l := logger.NewConsole(envDecoderConf.Debug)
 
-	client := httpclient.NewClient(&envDecoderConf.HTTPClientConf, l)
+	// client := httpclient.NewClient(&envDecoderConf.HTTPClientConf, l)
 
 	// create database connection through adapter
 	db, err := adapter.New(&envDecoderConf.DBConf)
@@ -95,14 +87,14 @@ func main() {
 
 	repo := repository.NewRepository(db)
 
-	alerter := &alerter.Alerter{
-		Client:     client,
-		Repository: repo,
-		Logger:     l,
-		AlertConfiguration: &alerter.AlertConfiguration{
-			DefaultJobAlertConfiguration: alerter.JobAlertConfigurationEvery,
-		},
-	}
+	// alerter := &alerter.Alerter{
+	// 	Client:     client,
+	// 	Repository: repo,
+	// 	Logger:     l,
+	// 	AlertConfiguration: &alerter.AlertConfiguration{
+	// 		DefaultJobAlertConfiguration: alerter.JobAlertConfigurationEvery,
+	// 	},
+	// }
 
 	// detector := &incident.IncidentDetector{
 	// 	KubeClient: kubeClient,
@@ -113,67 +105,67 @@ func main() {
 	// 	Logger:      l,
 	// }
 
-	resolver := &incident.IncidentResolver{
-		KubeClient: kubeClient,
-		// TODO: don't hardcode to 1.20
-		KubeVersion: incident.KubernetesVersion_1_20,
-		Repository:  repo,
-		Alerter:     alerter,
-		Logger:      l,
-	}
+	// resolver := &incident.IncidentResolver{
+	// 	KubeClient: kubeClient,
+	// 	// TODO: don't hardcode to 1.20
+	// 	KubeVersion: incident.KubernetesVersion_1_20,
+	// 	Repository:  repo,
+	// 	Alerter:     alerter,
+	// 	Logger:      l,
+	// }
 
-	jobProducer := &job.JobEventProducer{
-		KubeClient: *kubeClient,
-		Repository: repo,
-		Logger:     l,
-	}
+	// jobProducer := &job.JobEventProducer{
+	// 	KubeClient: *kubeClient,
+	// 	Repository: repo,
+	// 	Logger:     l,
+	// }
 
-	// trigger resolver through pulsar
-	go func() {
-		p := pulsar.NewPulsar(1, time.Minute) // pulse every 1 minute
+	// // trigger resolver through pulsar
+	// go func() {
+	// 	p := pulsar.NewPulsar(1, time.Minute) // pulse every 1 minute
 
-		for range p.Pulsate() {
-			err := resolver.Run()
+	// 	for range p.Pulsate() {
+	// 		err := resolver.Run()
 
-			if err != nil {
-				l.Error().Caller().Msgf("resolver exited with error: %v", err)
-			}
-		}
-	}()
+	// 		if err != nil {
+	// 			l.Error().Caller().Msgf("resolver exited with error: %v", err)
+	// 		}
+	// 	}
+	// }()
 
-	eventController := controllers.EventController{
-		KubeClient: kubeClient,
-		// TODO: don't hardcode to 1.20
-		KubeVersion:      incident.KubernetesVersion_1_20,
-		IncidentDetector: detector,
-		Repository:       repo,
-		LogStore:         logStore,
-		Logger:           l,
-		JobProducer:      jobProducer,
-	}
+	// eventController := controllers.EventController{
+	// 	KubeClient: kubeClient,
+	// 	// TODO: don't hardcode to 1.20
+	// 	KubeVersion: incident.KubernetesVersion_1_20,
+	// 	// IncidentDetector: detector,
+	// 	Repository: repo,
+	// 	LogStore:   logStore,
+	// 	Logger:     l,
+	// 	// JobProducer:      jobProducer,
+	// }
 
-	go eventController.Start()
+	// go eventController.Start()
 
-	podController := controllers.PodController{
-		KubeClient: kubeClient,
-		// TODO: don't hardcode to 1.20
-		KubeVersion:      incident.KubernetesVersion_1_20,
-		IncidentDetector: detector,
-		Logger:           l,
-		JobProducer:      jobProducer,
-	}
+	// podController := controllers.PodController{
+	// 	KubeClient: kubeClient,
+	// 	// TODO: don't hardcode to 1.20
+	// 	KubeVersion: incident.KubernetesVersion_1_20,
+	// 	IncidentDetector: detector,
+	// 	Logger: l,
+	// 	JobProducer:      jobProducer,
+	// }
 
-	go podController.Start()
+	// go podController.Start()
 
-	helmSecretController := controllers.HelmSecretController{
-		KubeClient: kubeClient,
-		// TODO: don't hardcode to 1.20
-		KubeVersion: incident.KubernetesVersion_1_20,
-		Logger:      l,
-		Repository:  repo,
-	}
+	// helmSecretController := controllers.HelmSecretController{
+	// 	KubeClient: kubeClient,
+	// 	// TODO: don't hardcode to 1.20
+	// 	KubeVersion: incident.KubernetesVersion_1_20,
+	// 	Logger:      l,
+	// 	Repository:  repo,
+	// }
 
-	go helmSecretController.Start()
+	// go helmSecretController.Start()
 
 	conf, err := config.GetConfig(&envDecoderConf, repo, logStore)
 

@@ -9,9 +9,12 @@ type Repository struct {
 	Incident        *IncidentRepository
 	IncidentEvent   *IncidentEventRepository
 	EventCache      *EventCacheRepository
-	Event           *EventRepository
 	HelmSecretCache *HelmSecretCacheRepository
 	JobCache        *JobCacheRepository
+
+	// Repositories as interfaces for easier testing
+
+	Event EventRepository
 }
 
 func NewRepository(db *gorm.DB) *Repository {

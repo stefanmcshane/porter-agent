@@ -1,3 +1,4 @@
+//go:generate mockgen -source=event.go -destination=mocks/event.go
 package repository
 
 import (
@@ -6,16 +7,25 @@ import (
 	"gorm.io/gorm"
 )
 
-type EventRepository struct {
+// EventRepository wraps all actions related to a stored porter event
+type EventRepository interface {
+	CreateEvent(event *models.Event) (*models.Event, error)
+	ReadEvent(id uint) (*models.Event, error)
+	UpdateEvent(event *models.Event) (*models.Event, error)
+	DeleteEvent(uid string) error
+	ListEvents(filter *utils.ListEventsFilter, opts ...utils.QueryOption) ([]*models.Event, *utils.PaginatedResult, error)
+}
+
+type eventRepository struct {
 	db *gorm.DB
 }
 
 // NewEventRepository returns pointer to repo along with the db
-func NewEventRepository(db *gorm.DB) *EventRepository {
-	return &EventRepository{db}
+func NewEventRepository(db *gorm.DB) EventRepository {
+	return eventRepository{db}
 }
 
-func (r *EventRepository) CreateEvent(event *models.Event) (*models.Event, error) {
+func (r eventRepository) CreateEvent(event *models.Event) (*models.Event, error) {
 	if err := r.db.Create(event).Error; err != nil {
 		return nil, err
 	}
@@ -23,7 +33,7 @@ func (r *EventRepository) CreateEvent(event *models.Event) (*models.Event, error
 	return event, nil
 }
 
-func (r *EventRepository) ReadEvent(id uint) (*models.Event, error) {
+func (r eventRepository) ReadEvent(id uint) (*models.Event, error) {
 	event := &models.Event{}
 
 	if err := r.db.Where("id = ?", id).First(event).Error; err != nil {
@@ -33,7 +43,7 @@ func (r *EventRepository) ReadEvent(id uint) (*models.Event, error) {
 	return event, nil
 }
 
-func (r *EventRepository) UpdateEvent(event *models.Event) (*models.Event, error) {
+func (r eventRepository) UpdateEvent(event *models.Event) (*models.Event, error) {
 	if err := r.db.Save(event).Error; err != nil {
 		return nil, err
 	}
@@ -41,7 +51,7 @@ func (r *EventRepository) UpdateEvent(event *models.Event) (*models.Event, error
 	return event, nil
 }
 
-func (r *EventRepository) ListEvents(
+func (r eventRepository) ListEvents(
 	filter *utils.ListEventsFilter,
 	opts ...utils.QueryOption,
 ) ([]*models.Event, *utils.PaginatedResult, error) {
@@ -76,7 +86,7 @@ func (r *EventRepository) ListEvents(
 	return events, paginatedResult, nil
 }
 
-func (r *EventRepository) DeleteEvent(uid string) error {
+func (r eventRepository) DeleteEvent(uid string) error {
 	incident := &models.Event{}
 
 	if err := r.db.Where("unique_id = ?", uid).First(incident).Error; err != nil {
