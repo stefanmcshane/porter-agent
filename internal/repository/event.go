@@ -61,6 +61,10 @@ func (r *EventRepository) ListEvents(
 		db = db.Where("release_namespace = ?", *filter.ReleaseNamespace)
 	}
 
+	if filter.AdditionalQueryMeta != nil {
+		db = db.Where("additional_query_meta = ?", *filter.AdditionalQueryMeta)
+	}
+
 	paginatedResult := &utils.PaginatedResult{}
 
 	db = db.Scopes(utils.Paginate(opts, db, paginatedResult))

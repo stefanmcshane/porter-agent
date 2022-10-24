@@ -229,6 +229,18 @@ func NewFilteredEventFromK8sEvent(k8sEvent *v1.Event) *FilteredEvent {
 		severity = EventSeverityHigh
 	}
 
+	if k8sEvent.Reason == "Created" && strings.Contains(k8sEvent.Message, "Created container job") {
+		return &FilteredEvent{
+			Source:            K8sEvent,
+			PodName:           k8sEvent.InvolvedObject.Name,
+			PodNamespace:      k8sEvent.InvolvedObject.Namespace,
+			KubernetesReason:  "Running",
+			KubernetesMessage: k8sEvent.Message,
+			Severity:          EventSeverityLow,
+			Timestamp:         &k8sEvent.LastTimestamp.Time,
+		}
+	}
+
 	return &FilteredEvent{
 		Source:            K8sEvent,
 		PodName:           k8sEvent.InvolvedObject.Name,
@@ -273,6 +285,8 @@ func NewFilteredEventsFromPod(pod *v1.Pod) []*FilteredEvent {
 		if waitingState := containerStatus.State.Waiting; waitingState != nil {
 			// if the waiting state is an image error, we store this as an event as well
 			if waitingState.Reason == "ImagePullBackOff" || waitingState.Reason == "ErrImagePull" || waitingState.Reason == "InvalidImageName" {
+				now := time.Now()
+
 				res = append(res, &FilteredEvent{
 					Source:            Pod,
 					PodName:           pod.Name,
@@ -280,9 +294,9 @@ func NewFilteredEventsFromPod(pod *v1.Pod) []*FilteredEvent {
 					KubernetesReason:  waitingState.Reason,
 					KubernetesMessage: waitingState.Message,
 					Severity:          EventSeverityHigh,
-					// We set this to the creation timestamp of the pod - note that this will miss cases where the image has been
-					// deleted from the registry and the pod was restarted afterwards.
-					Timestamp: &pod.CreationTimestamp.Time,
+					// If the image is currently in a waiting or image pull back off state, we want to alert on that
+					// immediately. We also don't have a good reference time for when image pull back off started.
+					Timestamp: &now,
 				})
 			}
 
@@ -295,6 +309,37 @@ func NewFilteredEventsFromPod(pod *v1.Pod) []*FilteredEvent {
 		} else if termState := containerStatus.State.Terminated; termState != nil {
 			if e := getEventFromTerminationState(pod.Name, pod.Namespace, termState); e != nil {
 				res = append(res, e)
+			}
+		}
+	}
+
+	// if the pod is owned by a job, we add low-severity filtered events to indicate when the job has started and
+	// completed. These events will be de-duplicated by the caller.
+	if len(pod.ObjectMeta.OwnerReferences) > 0 && pod.ObjectMeta.OwnerReferences[0].Kind == "Job" {
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			// we look explicitly for the `job` container
+			if containerStatus.Name == "job" {
+				if runningState := containerStatus.State.Running; runningState != nil {
+					res = append(res, &FilteredEvent{
+						Source:           Pod,
+						PodName:          pod.Name,
+						PodNamespace:     pod.Namespace,
+						KubernetesReason: "Running",
+						Severity:         EventSeverityLow,
+						Timestamp:        &runningState.StartedAt.Time,
+					})
+				}
+
+				if termState := containerStatus.State.Terminated; termState != nil {
+					res = append(res, &FilteredEvent{
+						Source:           Pod,
+						PodName:          pod.Name,
+						PodNamespace:     pod.Namespace,
+						KubernetesReason: "Completed",
+						Severity:         EventSeverityLow,
+						Timestamp:        &termState.FinishedAt.Time,
+					})
+				}
 			}
 		}
 	}

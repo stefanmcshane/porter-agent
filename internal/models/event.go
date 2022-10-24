@@ -19,6 +19,8 @@ type Event struct {
 	ReleaseNamespace string
 	Timestamp        *time.Time
 
+	AdditionalQueryMeta string
+
 	Data []byte
 }
 
@@ -38,6 +40,26 @@ func NewDeploymentFinishedEventV1() *Event {
 	return &Event{
 		UniqueID: randStr,
 		Type:     types.EventTypeDeploymentFinished,
+		Version:  "v1",
+	}
+}
+
+func NewJobStartedEventV1() *Event {
+	randStr, _ := GenerateRandomBytes(16)
+
+	return &Event{
+		UniqueID: randStr,
+		Type:     types.EventTypeJobStarted,
+		Version:  "v1",
+	}
+}
+
+func NewJobFinishedEventV1() *Event {
+	randStr, _ := GenerateRandomBytes(16)
+
+	return &Event{
+		UniqueID: randStr,
+		Type:     types.EventTypeJobFinished,
 		Version:  "v1",
 	}
 }

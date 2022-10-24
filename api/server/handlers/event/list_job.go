@@ -1,7 +1,6 @@
 package incident
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -10,25 +9,24 @@ import (
 	"github.com/porter-dev/porter-agent/internal/utils"
 	"github.com/porter-dev/porter/api/server/shared"
 	"github.com/porter-dev/porter/api/server/shared/apierrors"
-	"gorm.io/gorm"
 )
 
-type ListIncidentEventsHandler struct {
+type ListJobEventsHandler struct {
 	decoderValidator shared.RequestDecoderValidator
 	resultWriter     shared.ResultWriter
 	config           *config.Config
 }
 
-func NewListIncidentEventsHandler(config *config.Config) *ListIncidentEventsHandler {
-	return &ListIncidentEventsHandler{
+func NewListJobEventsHandler(config *config.Config) *ListJobEventsHandler {
+	return &ListJobEventsHandler{
 		resultWriter:     shared.NewDefaultResultWriter(config.Logger, config.Alerter),
 		decoderValidator: shared.NewDefaultRequestDecoderValidator(config.Logger, config.Alerter),
 		config:           config,
 	}
 }
 
-func (h *ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	req := &types.ListIncidentEventsRequest{
+func (h ListJobEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	req := &types.ListJobEventsRequest{
 		PaginationRequest: &types.PaginationRequest{},
 	}
 
@@ -36,33 +34,16 @@ func (h *ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	filter := &utils.ListIncidentEventsFilter{
-		PodName:      req.PodName,
-		PodNamespace: req.PodNamespace,
-		Summary:      req.Summary,
-		PodPrefix:    req.PodPrefix,
-	}
+	queryMeta := fmt.Sprintf("job/%s", req.JobName)
 
-	if req.IncidentID != nil {
-		incident, err := h.config.Repository.Incident.ReadIncident(*req.IncidentID)
-
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				apierrors.HandleAPIError(h.config.Logger, h.config.Alerter, w, r,
-					apierrors.NewErrNotFound(fmt.Errorf("no such incident exists")), true)
-				return
-			}
-
-			apierrors.HandleAPIError(h.config.Logger, h.config.Alerter, w, r, apierrors.NewErrInternal(err), true)
-			return
-		}
-
-		filter.IncidentID = &incident.ID
-	}
-
-	events, paginatedResult, err := h.config.Repository.IncidentEvent.ListEvents(
-		filter,
-		utils.WithSortBy("last_seen"),
+	events, paginatedResult, err := h.config.Repository.Event.ListEvents(
+		&utils.ListEventsFilter{
+			ReleaseName:         req.ReleaseName,
+			ReleaseNamespace:    req.ReleaseNamespace,
+			Type:                req.Type,
+			AdditionalQueryMeta: &queryMeta,
+		},
+		utils.WithSortBy("timestamp"),
 		utils.WithOrder(utils.OrderDesc),
 		utils.WithLimit(50),
 		utils.WithOffset(req.Page*50),
@@ -73,7 +54,7 @@ func (h *ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	res := &types.ListIncidentEventsResponse{
+	res := &types.ListEventsResponse{
 		Pagination: &types.PaginationResponse{
 			NumPages:    paginatedResult.NumPages,
 			CurrentPage: paginatedResult.CurrentPage,
@@ -81,8 +62,8 @@ func (h *ListIncidentEventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		},
 	}
 
-	for _, ev := range events {
-		res.Events = append(res.Events, ev.ToAPIType())
+	for _, event := range events {
+		res.Events = append(res.Events, event.ToAPIType())
 	}
 
 	h.resultWriter.WriteResult(w, r, res)

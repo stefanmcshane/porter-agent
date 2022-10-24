@@ -85,9 +85,10 @@ func getIncidentMetaFromEvent(e *event.FilteredEvent, match *EventMatch) *models
 	res.ShouldViewLogs = match.ShouldViewLogs
 	res.Revision = e.Owner.Revision
 
-	lastSeen := time.Now()
-
-	res.LastSeen = &lastSeen
+	if e.Timestamp == nil || e.Timestamp.IsZero() {
+		lastSeen := time.Now()
+		res.LastSeen = &lastSeen
+	}
 
 	return res
 }

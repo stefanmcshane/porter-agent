@@ -1,11 +1,13 @@
 package controllers
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/porter-dev/porter-agent/internal/logger"
 	"github.com/porter-dev/porter-agent/pkg/event"
 	"github.com/porter-dev/porter-agent/pkg/incident"
+	"github.com/porter-dev/porter-agent/pkg/job"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
@@ -20,6 +22,7 @@ type PodController struct {
 	EventStore       event.EventStore
 	KubeVersion      incident.KubernetesVersion
 	IncidentDetector *incident.IncidentDetector
+	JobProducer      *job.JobEventProducer
 	Logger           *logger.Logger
 }
 
@@ -70,10 +73,22 @@ func (p *PodController) processPod(pod *v1.Pod) error {
 	es := event.NewFilteredEventsFromPod(pod)
 
 	// trigger incident detection loop
+	errs := make([]error, 0)
+
 	err := p.IncidentDetector.DetectIncident(es)
 
 	if err != nil {
-		return err
+		errs = append(errs, err)
+	}
+
+	err = p.JobProducer.ParseFilteredEvents(es)
+
+	if err != nil {
+		errs = append(errs, err)
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("%v", errs)
 	}
 
 	return nil

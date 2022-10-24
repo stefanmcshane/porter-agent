@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/porter-dev/porter-agent/api/server/types"
 	"github.com/porter-dev/porter-agent/internal/logger"
@@ -232,6 +231,10 @@ func (d *IncidentDetector) saveEventFromIncident(incident *models.Incident) erro
 	event.Timestamp = incident.LastSeen
 	event.Data = incidentBytes
 
+	if strings.ToLower(string(incident.InvolvedObjectKind)) == "job" {
+		event.AdditionalQueryMeta = fmt.Sprintf("job/%s", incident.InvolvedObjectName)
+	}
+
 	if doesExist {
 		event, err = d.Repository.Event.UpdateEvent(event)
 	} else {
@@ -253,13 +256,21 @@ func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, 
 	// a primary cause event with the same summary as the candidate incident.
 	statusActive := types.IncidentStatusActive
 
-	candidateMatches, _, err := d.Repository.Incident.ListIncidents(&utils.ListIncidentsFilter{
+	filter := &utils.ListIncidentsFilter{
 		Status:           &statusActive,
 		ReleaseName:      &incident.ReleaseName,
 		ReleaseNamespace: &incident.ReleaseNamespace,
-	})
+	}
 
-	fmt.Printf("length of candidate matches for incident %s (%s) is %d\n", incident.UniqueID, incident.InvolvedObjectName, len(candidateMatches))
+	// we case on jobs differently - we only merge jobs with the same involved object name
+	if strings.ToLower(string(incident.InvolvedObjectKind)) == "job" {
+		kindFilter := string(incident.InvolvedObjectKind)
+
+		filter.InvolvedObjectKind = &kindFilter
+		filter.InvolvedObjectName = &incident.InvolvedObjectName
+	}
+
+	candidateMatches, _, err := d.Repository.Incident.ListIncidents(filter)
 
 	if err != nil {
 		return nil
@@ -274,12 +285,8 @@ func (d *IncidentDetector) mergeWithMatchingIncident(incident *models.Incident, 
 		}
 	}
 
-	fmt.Println("primary cause summary is:", primaryCauseSummary)
-
 	for _, candidateMatch := range candidateMatches {
 		for _, candidateMatchEvent := range candidateMatch.Events {
-			fmt.Printf("checking candidate %s (%s) with summary %s\n", candidateMatch.UniqueID, candidateMatch.InvolvedObjectName, candidateMatchEvent.Summary)
-
 			if candidateMatchEvent.IsPrimaryCause && candidateMatchEvent.Summary == primaryCauseSummary {
 				// in this case, we've found a match, and we merge and return
 
@@ -327,13 +334,15 @@ func mergeEvents(events1, events2 []models.IncidentEvent) []models.IncidentEvent
 	}
 
 	// any matched events are updated, other events are appended
-	now := time.Now()
-
 	for _, e2 := range events2 {
 		key := fmt.Sprintf("%s/%s-%v-%s", e2.PodName, e2.PodNamespace, e2.IsPrimaryCause, e2.Summary)
 
 		if e1, exists := keyMap[key]; exists {
-			e1.LastSeen = &now
+			// take the later of the last seen times
+			if e2.LastSeen.After(*e1.LastSeen) {
+				e1.LastSeen = e2.LastSeen
+			}
+
 			e1.Detail = e2.Detail
 		} else {
 			keyMap[key] = e2

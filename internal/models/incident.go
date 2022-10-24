@@ -19,7 +19,8 @@ type Incident struct {
 	LastAlerted *time.Time
 	LastSeen    *time.Time
 
-	ResolvedTime *time.Time
+	ResolvedTime       *time.Time
+	ResolvedRetryCount uint
 
 	IncidentStatus types.IncidentStatus
 

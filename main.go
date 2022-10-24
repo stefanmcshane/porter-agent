@@ -23,6 +23,7 @@ import (
 	"github.com/porter-dev/porter-agent/api/server/config"
 	argoHandlers "github.com/porter-dev/porter-agent/api/server/handlers/argo"
 	eventHandlers "github.com/porter-dev/porter-agent/api/server/handlers/event"
+	healthcheckHandlers "github.com/porter-dev/porter-agent/api/server/handlers/healthcheck"
 	incidentHandlers "github.com/porter-dev/porter-agent/api/server/handlers/incident"
 	logHandlers "github.com/porter-dev/porter-agent/api/server/handlers/log"
 	statusHandlers "github.com/porter-dev/porter-agent/api/server/handlers/status"
@@ -35,6 +36,7 @@ import (
 	"github.com/porter-dev/porter-agent/pkg/controllers"
 	"github.com/porter-dev/porter-agent/pkg/httpclient"
 	"github.com/porter-dev/porter-agent/pkg/incident"
+	"github.com/porter-dev/porter-agent/pkg/job"
 	"github.com/porter-dev/porter-agent/pkg/logstore"
 	"github.com/porter-dev/porter-agent/pkg/logstore/lokistore"
 	"github.com/porter-dev/porter-agent/pkg/logstore/memorystore"
@@ -120,6 +122,12 @@ func main() {
 		Logger:      l,
 	}
 
+	jobProducer := &job.JobEventProducer{
+		KubeClient: *kubeClient,
+		Repository: repo,
+		Logger:     l,
+	}
+
 	// trigger resolver through pulsar
 	go func() {
 		p := pulsar.NewPulsar(1, time.Minute) // pulse every 1 minute
@@ -133,37 +141,39 @@ func main() {
 		}
 	}()
 
-	// eventController := controllers.EventController{
-	// 	KubeClient: kubeClient,
-	// 	// TODO: don't hardcode to 1.20
-	// 	KubeVersion:      incident.KubernetesVersion_1_20,
-	// 	IncidentDetector: detector,
-	// 	Repository:       repo,
-	// 	LogStore:         logStore,
-	// 	Logger:           l,
-	// }
+	eventController := controllers.EventController{
+		KubeClient: kubeClient,
+		// TODO: don't hardcode to 1.20
+		KubeVersion:      incident.KubernetesVersion_1_20,
+		IncidentDetector: detector,
+		Repository:       repo,
+		LogStore:         logStore,
+		Logger:           l,
+		JobProducer:      jobProducer,
+	}
 
-	// go eventController.Start()
+	go eventController.Start()
 
-	// podController := controllers.PodController{
-	// 	KubeClient: kubeClient,
-	// 	// TODO: don't hardcode to 1.20
-	// 	KubeVersion:      incident.KubernetesVersion_1_20,
-	// 	IncidentDetector: detector,
-	// 	Logger:           l,
-	// }
+	podController := controllers.PodController{
+		KubeClient: kubeClient,
+		// TODO: don't hardcode to 1.20
+		KubeVersion:      incident.KubernetesVersion_1_20,
+		IncidentDetector: detector,
+		Logger:           l,
+		JobProducer:      jobProducer,
+	}
 
-	// go podController.Start()
+	go podController.Start()
 
-	// helmSecretController := controllers.HelmSecretController{
-	// 	KubeClient: kubeClient,
-	// 	// TODO: don't hardcode to 1.20
-	// 	KubeVersion: incident.KubernetesVersion_1_20,
-	// 	Logger:      l,
-	// 	Repository:  repo,
-	// }
+	helmSecretController := controllers.HelmSecretController{
+		KubeClient: kubeClient,
+		// TODO: don't hardcode to 1.20
+		KubeVersion: incident.KubernetesVersion_1_20,
+		Logger:      l,
+		Repository:  repo,
+	}
 
-	// go helmSecretController.Start()
+	go helmSecretController.Start()
 
 	conf, err := config.GetConfig(&envDecoderConf, repo, logStore)
 
@@ -193,17 +203,21 @@ func main() {
 
 	r.Mount("/debug", middleware.Profiler())
 
+	r.Method("GET", "/livez", healthcheckHandlers.NewLivezHandler(conf))
+	r.Method("GET", "/readyz", healthcheckHandlers.NewReadyzHandler(conf))
+
 	r.Method("GET", "/incidents", incidentHandlers.NewListIncidentsHandler(conf))
 
 	r.Method("GET", "/incidents", incidentHandlers.NewListIncidentsHandler(conf))
 	r.Method("GET", "/incidents/{uid}", incidentHandlers.NewGetIncidentHandler(conf))
-	r.Method("GET", "/incidents/{uid}/events", incidentHandlers.NewListIncidentEventsHandler(conf))
+	r.Method("GET", "/incidents/events", incidentHandlers.NewListIncidentEventsHandler(conf))
 
 	r.Method("GET", "/logs", logHandlers.NewGetLogHandler(conf))
 	r.Method("GET", "/logs/pod_values", logHandlers.NewGetPodValuesHandler(conf))
 	r.Method("GET", "/logs/revision_values", logHandlers.NewGetRevisionValuesHandler(conf))
 
 	r.Method("GET", "/events", eventHandlers.NewListEventsHandler(conf))
+	r.Method("GET", "/events/job", eventHandlers.NewListJobEventsHandler(conf))
 
 	r.Method("GET", "/status", statusHandlers.NewGetStatusHandler(conf))
 
